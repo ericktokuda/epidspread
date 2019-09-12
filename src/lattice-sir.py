@@ -16,23 +16,95 @@ from matplotlib import cm
 from matplotlib import pyplot as plt
 import math
 from subprocess import Popen, PIPE
+import json
 
 ########################################################## Defines
 SUSCEPTIBLE = 0
 INFECTED = 1
 RECOVERED = 2
 
+def step_mobility(g, particles, autoloop_prob):
+    """Give a step in the mobility dynamic
+
+    Args:
+    g(igraph.Graph): instance of a graph
+    particles(list of list): the set of particle ids for each vertex
+    autoloop_prob(float): probability of staying in the same place
+
+    Returns:
+    list of list: indices of the particles in each vertex
+    """
+    particles_fixed = copy.deepcopy(particles) # copy to avoid being altered
+
+    for i, _ in enumerate(g.vs): # For each vertex
+        numvparticles = len(particles_fixed[i])
+        neighids = g.neighbors(i)
+        gradients = g.vs[neighids]['gradient']
+        gradients /= np.sum(gradients)
+
+        for j, partic in enumerate(particles_fixed[i]): # For each particle in this vertex
+            if np.random.rand() <= autoloop_prob: continue
+            neighid = np.random.choice(neighids, p=gradients)
+            particles[i].remove(partic)
+            particles[neighid].append(partic)
+    return particles
+
 ##########################################################
-def compute_iteration(ep, g, layout, visual, status, nvertices, particles,
-                      N, b, outattractivinesspath,
-                      totalnsusceptibles, totalninfected, totalnrecovered, outdir):
+def step_transmission(g, status, beta, gamma, particles):
+    """Give a step in the transmission dynamic
+
+    Args:
+    g(igraph.Graph): instance of a graph
+    status(list): statuses of each particle
+    beta(float): contagion chance
+    gamma(float): recovery chance
+    particles(list of list): the set of particle ids for each vertex
+
+    Returns:
+    list: updated statuses
+    """
+
+    statuses_fixed = copy.deepcopy(status)
+    for i, _ in enumerate(g.vs):
+        statuses = statuses_fixed[particles[i]]
+        susceptible = statuses[statuses==SUSCEPTIBLE]            
+        infected = statuses[statuses==INFECTED]            
+        recovered = statuses[statuses==RECOVERED]
+        numnewinfected = round(beta * len(susceptible) * len(infected))
+        numnewrecovered = round(gamma*len(infected))
+        indsusceptible = np.where(statuses_fixed==SUSCEPTIBLE)[0]
+        indinfected = np.where(statuses_fixed==INFECTED)[0]
+        indrecovered = np.where(statuses_fixed==RECOVERED)[0]
+
+        if numnewinfected > 0: status[indsusceptible[0:numnewinfected]] = INFECTED  # I don't like this "if"
+        if numnewrecovered > 0: status[indinfected[0:numnewrecovered]] = RECOVERED
+    return status
+
+##########################################################
+def compute_statuses_sums(status, particles, nvertices, totalnsusceptibles,
+                          totalninfected, totalnrecovered):
+    """Compute the sum of each status
+
+    Args:
+    params
+
+    Returns:
+    nsusceptibles(list of int): number of susceptibles per vertex
+    ninfected(list of int): number of infected per vertex
+    nrecovered(list of int): number of recovered per vertex
+    """
+
     nsusceptibles = np.array([ np.sum(status[particles[i]]==SUSCEPTIBLE) for i in range(nvertices)] )
     ninfected = np.array([ np.sum(status[particles[i]]==INFECTED) for i in range(nvertices)] )
     nrecovered = np.array([ np.sum(status[particles[i]]==RECOVERED) for i in range(nvertices)] )
     totalnsusceptibles.append(np.sum(nsusceptibles))
     totalninfected.append(np.sum(ninfected))
     totalnrecovered.append(np.sum(nrecovered))
-    
+    return nsusceptibles, ninfected, nrecovered, totalnsusceptibles, totalninfected, totalnrecovered
+##########################################################
+def plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
+                      N, b, outgradientspath, nsusceptibles, ninfected, nrecovered, totalnsusceptibles,
+                      totalninfected, totalnrecovered, outdir):
     susceptiblecolor = []
     infectedcolor = []
     recoveredcolor = []
@@ -60,7 +132,7 @@ def compute_iteration(ep, g, layout, visual, status, nvertices, particles,
                 vertex_color=recoveredcolor, vertex_label_color='white', **visual)      
 
     outconcatpath = pjoin(outdir, 'concat{:02d}.png'.format(ep+1))
-    proc = Popen('convert {} {} {} {} +append {}'.format(outattractivinesspath,
+    proc = Popen('convert {} {} {} {} +append {}'.format(outgradientspath,
                                                          outsusceptiblepath,
                                                          outinfectedpath,
                                                          outrecoveredpath,
@@ -71,38 +143,38 @@ def compute_iteration(ep, g, layout, visual, status, nvertices, particles,
 ##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--outdir', required=False, default='/tmp',
-                        help='Output directory')
+    parser.add_argument('config', nargs='?', default='config/toy01.json')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s] %(message)s',
     datefmt='%Y%m%d %H:%M', level=logging.DEBUG)
 
-    outdir = args.outdir
 
     ########################################################## PARAMETERS
-    # TODO: move to external config file
-    mapw = 3
-    maph = 3
-    dim = [mapw, maph]
-    nei = 2
-    istoroid = True
-    nepochs = 100
+    with open(args.config) as fh:
+        cfg = json.load(fh)
 
-    s0 = 500
-    i0 = 5
-    r0 = 10
-    beta = 0.4
-    gamma = 0.5
-
-    autoloop_prob = 0.5 # probability of staying
-
-    plotw, ploth = (300, 300)
-    plotmargin = 20
-    plotvsize = 40
-    plotlayout = 'kk'
+    mapw = cfg['mapw']
+    maph = cfg['maph']
+    nei = cfg['nei']
+    istoroid = cfg['istoroid']
+    nepochs = cfg['nepochs']
+    s0 = cfg['s0']
+    i0 = cfg['i0']
+    r0 = cfg['r0']
+    beta = cfg['beta']
+    gamma = cfg['gamma']
+    autoloop_prob = cfg['autoloop_prob']
+    plotw = cfg['plotw']
+    ploth = cfg['ploth']
+    plotmargin = cfg['plotmargin']
+    plotvsize = cfg['plotvsize']
+    plotlayout = cfg['plotlayout']
+    plotrate = cfg['plotrate']
+    outdir = cfg['outdir']
 
     ########################################################## Load config
+    dim = [mapw, maph]
     N = s0 + i0 + r0
     nvertices = mapw*maph # square lattice
     status = np.ndarray(N, dtype=int)
@@ -124,23 +196,19 @@ def main():
     layout = g.layout(plotlayout)
 
     ########################################################## Distrib. of particles
-    nparticles = np.ndarray(nvertices)
-    for i in range(nvertices):
-        nparticles[i] = np.random.randint(10) # Uniform distrib
-        
-    nparticles = (nparticles / (np.sum(nparticles))*N).astype(int)
-
+    nparticles = np.ndarray(nvertices, dtype=int)
+    aux = np.random.rand(nvertices) # Uniform distrib
+    nparticles = np.round(aux / (np.sum(aux)) *N).astype(int)
     diff = N - np.sum(nparticles) # Correct rounding differences on the final number
     for i in range(np.abs(diff)):
-        idx = np.random.randint(np.absolute(nvertices))
-        nparticles[idx] += 1 * np.sign(diff)
+        idx = np.random.randint(nvertices)
+        nparticles[idx] += np.sign(diff) # Initialize number of particles per vertex
 
-    # Initialize distribution of particles (with status)
-    particles = [None]*nvertices
-    k = 0
+    particles = [None]*nvertices # Initialize indices of particles per vertex
+    aux = 0
     for i in range(nvertices):
-        particles[i] = list(range(k, k+nparticles[i]))
-        k += nparticles[i]
+        particles[i] = list(range(aux, aux+nparticles[i]))
+        aux += nparticles[i]
 
     ########################################################## Distrib. of gradients
     g.vs['gradient'] = 5
@@ -148,60 +216,42 @@ def main():
     g.vs[3]['gradient'] = 25
 
     ########################################################## Plot gradients
-    maxattractiviness = np.max(g.vs['gradient'])
-    attractivinesscolors = [[1, 1, 1]]*nvertices
-    attractivinesslabels = [ str(x/50) for x in g.vs['gradient']]
-    outattractivinesspath = pjoin(outdir, 'gradient.png')
-    igraph.plot(g, target=outattractivinesspath, layout=layout,
-                vertex_label=attractivinesslabels,
-                vertex_color=attractivinesscolors, **visual)      
+    maxgradients = np.max(g.vs['gradient'])
+    gradientscolors = [[1, 1, 1]]*nvertices
+    gradientslabels = [ str(x/50) for x in g.vs['gradient']]
+    outgradientspath = pjoin(outdir, 'gradients.png')
+    igraph.plot(g, target=outgradientspath, layout=layout,
+                vertex_label=gradientslabels,
+                vertex_color=gradientscolors, **visual)      
 
     b = 0.1 # For colors definition
     ########################################################## Plot epoch 0
-    compute_iteration(-1, g, layout, visual, status, nvertices, particles,
-                      N, b, outattractivinesspath,
+    nsusceptibles, ninfected, nrecovered, \
+        totalnsusceptibles, totalninfected, \
+        totalnrecovered  = compute_statuses_sums(status, particles, nvertices,
+                                                 totalnsusceptibles, totalninfected,
+                                                 totalnrecovered)
+    plot_epoch_graphs(-1, g, layout, visual, status, nvertices, particles,
+                      N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
                       totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
     for ep in range(nepochs):
-        ########################################################## Mobility
-        particles_fixed = copy.deepcopy(particles) # copy to avoid being altered
-
-        
-        for i, _ in enumerate(g.vs): # For each vertex
-            numvparticles = len(particles_fixed[i])
-            neighids = g.neighbors(i)
-            gradient = g.vs[neighids]['gradient']
-            gradient /= np.sum(gradient)
-
-            for j, partic in enumerate(particles_fixed[i]): # For each particle in this vertex
-                if np.random.rand() <= autoloop_prob: continue
-                neighid = np.random.choice(neighids, p=gradient)
-                particles[i].remove(partic)
-                particles[neighid].append(partic)
+        particles = step_mobility(g, particles, autoloop_prob)
+        status = step_transmission(g, status, beta, gamma, particles)
       
-        ########################################################## Infection
-        statuses_fixed = copy.deepcopy(status)
-        for i, _ in enumerate(g.vs):
-            statuses = statuses_fixed[particles[i]]
-            susceptible = statuses[statuses==SUSCEPTIBLE]            
-            infected = statuses[statuses==INFECTED]            
-            recovered = statuses[statuses==RECOVERED]
-            numnewinfected = round(beta * len(susceptible) * len(infected))
-            numnewrecovered = round(gamma*len(infected))
-            indsusceptible = np.where(statuses_fixed==SUSCEPTIBLE)[0]
-            indinfected = np.where(statuses_fixed==INFECTED)[0]
-            indrecovered = np.where(statuses_fixed==RECOVERED)[0]
-
-            if numnewinfected > 0: status[indsusceptible[0:numnewinfected]] = INFECTED  # I don't like this "if"
-            if numnewrecovered > 0: status[indinfected[0:numnewrecovered]] = RECOVERED
-       
-        compute_iteration(ep, g, layout, visual, status, nvertices, particles,
-                          N, b, outattractivinesspath,
-                          totalnsusceptibles, totalninfected, totalnrecovered, outdir)
+        nsusceptibles, ninfected, nrecovered, \
+            totalnsusceptibles, totalninfected, \
+            totalnrecovered  = compute_statuses_sums(status, particles, nvertices,
+                                                     totalnsusceptibles, totalninfected,
+                                                     totalnrecovered)
+        if ep % plotrate == 0:
+            plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
+                              N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
+                              totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
     ########################################################## Enhance plots
     cmd = "mogrify -gravity south -pointsize 24 " "-annotate +50+0 'GRADIENT' " \
-        "-annotate +350+0 'S' -annotate +650+0 'I' -annotate +950+0 'R'" \
+        "-annotate +350+0 'S' -annotate +650+0 'I' -annotate +950+0 'R' " \
         "{}/concat*.png".format(outdir)
     proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
