@@ -16,12 +16,19 @@ from matplotlib import cm
 from matplotlib import pyplot as plt
 import math
 from subprocess import Popen, PIPE
-import json
+from datetime import datetime
+
 
 ########################################################## Defines
 SUSCEPTIBLE = 0
 INFECTED = 1
 RECOVERED = 2
+
+def visualize_static_graph(g, layoutspath, outdir):
+    layouts = [line.rstrip('\n') for line in open(layoutspath)]
+    for l in layouts:
+        debug(l)
+        igraph.plot(g, target=pjoin(outdir, l + '.png'), layout=g.layout(l))
 
 def step_mobility(g, particles, autoloop_prob):
     """Give a step in the mobility dynamic
@@ -67,17 +74,22 @@ def step_transmission(g, status, beta, gamma, particles):
     statuses_fixed = copy.deepcopy(status)
     for i, _ in enumerate(g.vs):
         statuses = statuses_fixed[particles[i]]
+        N = len(statuses)
         susceptible = statuses[statuses==SUSCEPTIBLE]            
         infected = statuses[statuses==INFECTED]            
         recovered = statuses[statuses==RECOVERED]
+
         numnewinfected = round(beta * len(susceptible) * len(infected))
+        if numnewinfected > len(susceptible): numnewinfected = len(susceptible)
         numnewrecovered = round(gamma*len(infected))
+        if numnewrecovered > len(infected): numnewrecovered = len(infected)
+
         indsusceptible = np.where(statuses_fixed==SUSCEPTIBLE)[0]
         indinfected = np.where(statuses_fixed==INFECTED)[0]
         indrecovered = np.where(statuses_fixed==RECOVERED)[0]
 
-        if numnewinfected > 0: status[indsusceptible[0:numnewinfected]] = INFECTED  # I don't like this "if"
-        if numnewrecovered > 0: status[indinfected[0:numnewrecovered]] = RECOVERED
+        status[indsusceptible[0:numnewinfected]] = INFECTED
+        status[indinfected[0:numnewrecovered]] = RECOVERED
     return status
 
 ##########################################################
@@ -149,51 +161,29 @@ def main():
     logging.basicConfig(format='[%(asctime)s] %(message)s',
     datefmt='%Y%m%d %H:%M', level=logging.DEBUG)
 
+    cfg = pd.read_json(args.config, typ='series') # Load config
 
-    ########################################################## PARAMETERS
-    with open(args.config) as fh:
-        cfg = json.load(fh)
-
-    mapw = cfg['mapw']
-    maph = cfg['maph']
-    nei = cfg['nei']
-    istoroid = cfg['istoroid']
-    nepochs = cfg['nepochs']
-    s0 = cfg['s0']
-    i0 = cfg['i0']
-    r0 = cfg['r0']
-    beta = cfg['beta']
-    gamma = cfg['gamma']
-    autoloop_prob = cfg['autoloop_prob']
-    plotw = cfg['plotw']
-    ploth = cfg['ploth']
-    plotmargin = cfg['plotmargin']
-    plotvsize = cfg['plotvsize']
-    plotlayout = cfg['plotlayout']
-    plotrate = cfg['plotrate']
-    outdir = cfg['outdir']
-
-    ########################################################## Load config
-    dim = [mapw, maph]
-    N = s0 + i0 + r0
-    nvertices = mapw*maph # square lattice
+    outdir = pjoin(cfg.outdir, datetime.now().strftime("%m%d%Y-%H:%M"))
+    dim = [cfg.mapw, cfg.maph]
+    N = cfg.s0 + cfg.i0 + cfg.r0
+    nvertices = cfg.mapw*cfg.maph # square lattice
     status = np.ndarray(N, dtype=int)
-    status[0: s0] = SUSCEPTIBLE
-    status[s0:s0+i0] = INFECTED
-    status[s0+i0:] = RECOVERED
+    status[0: cfg.s0] = SUSCEPTIBLE
+    status[cfg.s0:cfg.s0+cfg.i0] = INFECTED
+    status[cfg.s0+cfg.i0:] = RECOVERED
     np.random.shuffle(status)
 
     visual = {}
-    visual["bbox"] = (plotw, ploth)
-    visual["margin"] = plotmargin
-    visual["vertex_size"] = plotvsize
+    visual["bbox"] = (cfg.plotw, cfg.ploth)
+    visual["margin"] = cfg.plotmargin
+    visual["vertex_size"] = cfg.plotvsize
 
-    totalnsusceptibles = [s0]
-    totalninfected = [i0]
-    totalnrecovered = [r0]
+    totalnsusceptibles = [cfg.s0]
+    totalninfected = [cfg.i0]
+    totalnrecovered = [cfg.r0]
 
-    g = igraph.Graph.Lattice(dim, nei, directed=False, mutual=True, circular=istoroid)
-    layout = g.layout(plotlayout)
+    g = igraph.Graph.Lattice(dim, cfg.nei, directed=False, mutual=True, circular=cfg.istoroid)
+    layout = g.layout(cfg.plotlayout)
 
     ########################################################## Distrib. of particles
     nparticles = np.ndarray(nvertices, dtype=int)
@@ -235,16 +225,16 @@ def main():
                       N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
                       totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
-    for ep in range(nepochs):
-        particles = step_mobility(g, particles, autoloop_prob)
-        status = step_transmission(g, status, beta, gamma, particles)
+    for ep in range(cfg.nepochs):
+        particles = step_mobility(g, particles, cfg.autoloop_prob)
+        status = step_transmission(g, status, cfg.beta, cfg.gamma, particles)
       
         nsusceptibles, ninfected, nrecovered, \
             totalnsusceptibles, totalninfected, \
             totalnrecovered  = compute_statuses_sums(status, particles, nvertices,
                                                      totalnsusceptibles, totalninfected,
                                                      totalnrecovered)
-        if ep % plotrate == 0:
+        if ep % cfg.plotrate == 0:
             plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
                               N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
                               totalnsusceptibles, totalninfected, totalnrecovered, outdir)
@@ -262,11 +252,11 @@ def main():
     print(stderr)
 
     ########################################################## Plot SIR over time
-    plt.plot(totalnsusceptibles, 'r', label='Susceptibles')
-    plt.plot(totalninfected, 'g', label='Infected')
+    plt.plot(totalnsusceptibles, 'g', label='Susceptibles')
+    plt.plot(totalninfected, 'r', label='Infected')
     plt.plot(totalnrecovered, 'b', label='Recovered')
     plt.legend()
-    plt.savefig('/tmp/out.png')
+    plt.savefig(pjoin(outdir, 'sir.png))
 
 if __name__ == "__main__":
     main()
