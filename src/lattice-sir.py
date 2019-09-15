@@ -4,6 +4,7 @@
 
 import argparse
 import logging
+import os
 from os.path import join as pjoin
 from logging import debug
 
@@ -120,26 +121,25 @@ def plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
     susceptiblecolor = []
     infectedcolor = []
     recoveredcolor = []
-    
+
     for z in nsusceptibles:
-        zz = [math.log(z, b)/math.log(N, b), 0, 0] if z != 0 else [0, 0, 0]
+        zz = [math.log(z, N), 0, 0] if z != 0 else [0, 0, 0]
         susceptiblecolor.append(zz)
     for z in ninfected:
-        zz = [0, math.log(z, b)/math.log(N, b), 0] if z != 0 else [0, 0, 0]
+        zz = [0, math.log(z, N), 0] if z != 0 else [0, 0, 0]
         infectedcolor.append(zz)
     for z in nrecovered:
-        zz = [0, 0, math.log(z, b)/math.log(N, b)] if z != 0 else [0, 0, 0]
+        zz = [0, 0,  math.log(z, N)] if z != 0 else [0, 0, 0]
         recoveredcolor.append(zz)  
         
     outsusceptiblepath = pjoin(outdir, 'susceptible{:02d}.png'.format(ep+1))
+    outinfectedpath = pjoin(outdir, 'infected{:02d}.png'.format(ep+1))
+    outrecoveredpath = pjoin(outdir, 'recovered{:02d}.png'.format(ep+1))
+
     igraph.plot(g, target=outsusceptiblepath, layout=layout, vertex_label=nsusceptibles,
                 vertex_label_color='white', vertex_color=susceptiblecolor, **visual)      
-
-    outinfectedpath = pjoin(outdir, 'infected{:02d}.png'.format(ep+1))
     igraph.plot(g, target=outinfectedpath, layout=layout, vertex_label=ninfected,
                 vertex_color=infectedcolor, vertex_label_color='white', **visual)      
-
-    outrecoveredpath = pjoin(outdir, 'recovered{:02d}.png'.format(ep+1))
     igraph.plot(g, target=outrecoveredpath, layout=layout, vertex_label=nrecovered,
                 vertex_color=recoveredcolor, vertex_label_color='white', **visual)      
 
@@ -163,7 +163,14 @@ def main():
 
     cfg = pd.read_json(args.config, typ='series') # Load config
 
-    outdir = pjoin(cfg.outdir, datetime.now().strftime("%m%d%Y-%H:%M"))
+    outdir = pjoin(cfg.outdir, datetime.now().strftime('%Y%m%d-%H%M'))
+    if os.path.exists(outdir):
+        ans = input(outdir + ' exists. Do you want to continue?')
+        if ans.lower() not in ['y', 'yes']:
+            print('Aborting')
+            return
+    else:
+        os.mkdir(outdir)
     dim = [cfg.mapw, cfg.maph]
     N = cfg.s0 + cfg.i0 + cfg.r0
     nvertices = cfg.mapw*cfg.maph # square lattice
@@ -201,9 +208,10 @@ def main():
         aux += nparticles[i]
 
     ########################################################## Distrib. of gradients
+    ids = np.random.randint(g.vcount(), size=2)
     g.vs['gradient'] = 5
-    g.vs[1]['gradient'] = 1
-    g.vs[3]['gradient'] = 25
+    g.vs[ids[0]]['gradient'] = 1
+    g.vs[ids[1]]['gradient'] = 25
 
     ########################################################## Plot gradients
     maxgradients = np.max(g.vs['gradient'])
@@ -246,8 +254,9 @@ def main():
     proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
 
-    proc = Popen('convert -delay 120 -loop 0  /tmp/concat*.png /tmp/movie.gif',
-                 shell=True, stdout=PIPE, stderr=PIPE)
+    animationpath = pjoin(outdir, 'animation.gif')
+    cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
+    proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
     print(stderr)
 
@@ -256,7 +265,7 @@ def main():
     plt.plot(totalninfected, 'r', label='Infected')
     plt.plot(totalnrecovered, 'b', label='Recovered')
     plt.legend()
-    plt.savefig(pjoin(outdir, 'sir.png))
+    plt.savefig(pjoin(outdir, 'sir.png'))
 
 if __name__ == "__main__":
     main()
