@@ -27,11 +27,12 @@ INFECTED = 1
 RECOVERED = 2
 EPSILON = 1E-5
 
-def visualize_static_graph(g, layoutspath, outdir):
+def visualize_static_graph_layouts(g, layoutspath, outdir):
     layouts = [line.rstrip('\n') for line in open(layoutspath)]
     for l in layouts:
         info(l)
         igraph.plot(g, target=pjoin(outdir, l + '.png'), layout=g.layout(l),
+                    vertex_color='lightgrey',
                     vertex_label=list(range(g.vcount())))
 
 ########################################################## Distrib. of gradients
@@ -88,13 +89,9 @@ k
     g.vs['gradient'] = -1
     centeridx = int((g.vcount())/2) + 1
     set_gaussian_weights_recursive(g, centeridx, 0, mu, sigma)
-    # print(g.vs['gradient'])
     inds = np.where(np.array(g.vs['gradient']) == -1)[0]
-    # print(inds)
     for i in inds:
         g.vs[i]['gradient'] = 0
-
-    # input(g.vs['gradient'])
 
     return g
 
@@ -243,6 +240,14 @@ def plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
     stdout, stderr = proc.communicate()
 
 ##########################################################
+def plot_sir(s, i, r, fig, ax, outdir):
+    ax.plot(s, 'g', label='Susceptibles')
+    ax.plot(i, 'r', label='Infected')
+    ax.plot(r, 'b', label='Recovered')
+    ax.legend()
+    fig.savefig(pjoin(outdir, 'sir.png'))
+
+##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('config', nargs='?', default='config/toy01.json')
@@ -255,12 +260,13 @@ def main():
 
     outdir = pjoin(cfg.outdir, datetime.now().strftime('%Y%m%d-%H%M'))
     if os.path.exists(outdir):
-        ans = input(outdir + ' exists. Do you want to continue?')
+        ans = input(outdir + ' exists. Do you want to continue? ')
         if ans.lower() not in ['y', 'yes']:
             info('Aborting')
             return
     else:
         os.mkdir(outdir)
+
     dim = [cfg.mapw, cfg.maph]
     N = cfg.s0 + cfg.i0 + cfg.r0
     nvertices = cfg.mapw*cfg.maph # square lattice
@@ -269,6 +275,7 @@ def main():
     status[cfg.s0:cfg.s0+cfg.i0] = INFECTED
     status[cfg.s0+cfg.i0:] = RECOVERED
     np.random.shuffle(status)
+    info('Generated random distribution of S, I, R ...')
 
     visual = {}
     visual["bbox"] = (cfg.plotw, cfg.ploth)
@@ -279,11 +286,18 @@ def main():
     totalninfected = [cfg.i0]
     totalnrecovered = [cfg.r0]
 
+    aux = '' if cfg.istoroid else 'non-'
+    info('Generating {}toroidal lattice with dim ({}, {}) ...'.format(aux,
+                                                                  cfg.mapw,
+                                                                  cfg.maph,
+                                                                  ))
     g = igraph.Graph.Lattice(dim, cfg.nei, directed=False, mutual=True, circular=cfg.istoroid)
-    # visualize_static_graph(g, 'config/layouts_lattice.txt', outdir); input()
+
+    visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
     layout = g.layout(cfg.plotlayout)
 
     ########################################################## Distrib. of particles
+    info('Generating uniform distribution of agents in the lattice ...')
     nparticles = np.ndarray(nvertices, dtype=int)
     aux = np.random.rand(nvertices) # Uniform distrib
     nparticles = np.round(aux / (np.sum(aux)) *N).astype(int)
@@ -300,13 +314,11 @@ def main():
         aux += nparticles[i]
 
     ########################################################## Distrib. of gradients
+    info('Initializing gradients distribution ...')
     g = initialize_gradients(g, 'gaussian')
-    # ids = np.random.randint(g.vcount(), size=2)
-    # g.vs['gradient'] = 5
-    # g.vs[ids[0]]['gradient'] = 1
-    # g.vs[ids[1]]['gradient'] = 25
 
     ########################################################## Plot gradients
+    info('Generating plots for epoch 0')
     maxgradients = np.max(g.vs['gradient'])
     gradientscolors = [[1, 1, 1]]*nvertices
     gradientslabels = [ str(x/50) for x in g.vs['gradient']]
@@ -327,6 +339,8 @@ def main():
                       totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
     for ep in range(cfg.nepochs):
+        if ep % 100:
+            info('Epoch {}'.format(ep))
         particles = step_mobility(g, particles, cfg.autoloop_prob)
         status = step_transmission(g, status, cfg.beta, cfg.gamma, particles)
       
@@ -335,7 +349,7 @@ def main():
             totalnrecovered  = compute_statuses_sums(status, particles, nvertices,
                                                      totalnsusceptibles, totalninfected,
                                                      totalnrecovered)
-        if ep % cfg.plotrate == 0:
+        if cfg.plotrate > 0 and ep % cfg.plotrate == 0:
             plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
                               N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
                               totalnsusceptibles, totalninfected, totalnrecovered, outdir)
@@ -354,12 +368,10 @@ def main():
     print(stderr)
 
     ########################################################## Plot SIR over time
-    plt.plot(totalnsusceptibles, 'g', label='Susceptibles')
-    plt.plot(totalninfected, 'r', label='Infected')
-    plt.plot(totalnrecovered, 'b', label='Recovered')
-    plt.legend()
-    plt.savefig(pjoin(outdir, 'sir.png'))
-    info('Results are in ')
+    info('Generating plots for counts of S, I, R')
+    fig, ax = plt.subplots(1, 1)
+    plot_sir(totalnsusceptibles, totalninfected, totalnrecovered, fig, ax, outdir)
+    info('Finished. Results are in {}'.format(outdir))
 
 if __name__ == "__main__":
     main()

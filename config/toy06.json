@@ -15,6 +15,6 @@
 	"plotmargin" : 20,
 	"plotvsize" : 40,
 	"plotlayout" : "grid",
-	"plotrate" : 1,
+	"plotrate" : 0,
 	"outdir" : "/tmp"
 }
