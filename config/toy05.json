@@ -1,7 +1,7 @@
 {
 	"mapw" : 3,
 	"maph" : 3,
-	"nei" : 2,
+	"nei" : 1,
 	"istoroid" : true,
 	"nepochs" : 100,
 	"s0" : 485,
@@ -14,7 +14,7 @@
 	"ploth" : 300,
 	"plotmargin" : 20,
 	"plotvsize" : 40,
-	"plotlayout" : "kk",
+	"plotlayout" : "grid",
 	"plotrate" : 1,
 	"outdir" : "/tmp"
 }

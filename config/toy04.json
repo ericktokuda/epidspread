@@ -1,7 +1,7 @@
 {
 	"mapw" : 2,
 	"maph" : 2,
-	"nei" : 3,
+	"nei" : 1,
 	"istoroid" : true,
 	"nepochs" : 100,
 	"s0" : 1,
