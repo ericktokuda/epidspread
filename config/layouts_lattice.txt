@@ -9,6 +9,5 @@ mds
 random
 reingold_tilford
 reingold_tilford_circular
-circle_3d
 star
 sugiyama
