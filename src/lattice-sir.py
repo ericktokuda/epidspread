@@ -6,7 +6,7 @@ import argparse
 import logging
 import os
 from os.path import join as pjoin
-from logging import debug
+from logging import debug, info
 
 import igraph
 import networkx as nx
@@ -15,6 +15,7 @@ import pandas as pd
 import copy
 from matplotlib import cm
 from matplotlib import pyplot as plt
+from mpl_toolkits import mplot3d
 import math
 from subprocess import Popen, PIPE
 from datetime import datetime
@@ -24,12 +25,95 @@ from datetime import datetime
 SUSCEPTIBLE = 0
 INFECTED = 1
 RECOVERED = 2
+EPSILON = 1E-5
 
 def visualize_static_graph(g, layoutspath, outdir):
     layouts = [line.rstrip('\n') for line in open(layoutspath)]
     for l in layouts:
-        debug(l)
-        igraph.plot(g, target=pjoin(outdir, l + '.png'), layout=g.layout(l))
+        info(l)
+        igraph.plot(g, target=pjoin(outdir, l + '.png'), layout=g.layout(l),
+                    vertex_label=list(range(g.vcount())))
+
+########################################################## Distrib. of gradients
+def initialize_gradients_adhoc(g):
+    """Arbitrary initizalition of gradients
+
+    Args:
+    g(igraph.Graph): graph instance
+
+    Returns:
+    igraph.Graph: graph instance with attribute 'gradient' updated
+    """
+    ids = np.random.randint(g.vcount(), size=2)
+    g.vs['gradient'] = 5
+    g.vs[ids[0]]['gradient'] = 1
+    g.vs[ids[1]]['gradient'] = 25
+    return g
+
+##########################################################
+def multivariate_normal(x, d, mean, cov):
+    """pdf of the multivariate normal when the covariance matrix is positive definite.
+    Source: wikipedia"""
+    return (1. / (np.sqrt((2 * np.pi)**d * np.linalg.det(cov))) *
+            np.exp(-(np.linalg.solve(cov, x - mean).T.dot(x - mean)) / 2))
+
+##########################################################
+def gaussian(x, mu, sig):
+    """pdf of the normal distrib"""
+    return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+
+##########################################################
+def set_gaussian_weights_recursive(g, curid, dist, mu, sigma):
+    if g.vs[curid]['gradient'] != -1: return # Already set
+    # info('curid:{}'.format(curid))
+
+    newgrad = gaussian(dist, mu, sigma)
+    g.vs[curid]['gradient'] = newgrad
+    if newgrad < EPSILON: return # I'm discarding values below EPSILON
+
+    for v in g.neighbors(curid):
+        set_gaussian_weights_recursive(g, v, dist+1, mu, sigma)
+
+##########################################################
+def initialize_gradients_gaussian(g, mu=0, sigma=1):
+    """Initizalition of gradients with a single gaussian
+
+    Args:
+    g(igraph.Graph): graph instance
+k
+    Returns:
+    igraph.Graph: graph instance with attribute 'gradient' updated
+    """
+
+    g.vs['gradient'] = -1
+    centeridx = int((g.vcount())/2) + 1
+    set_gaussian_weights_recursive(g, centeridx, 0, mu, sigma)
+    # print(g.vs['gradient'])
+    inds = np.where(np.array(g.vs['gradient']) == -1)[0]
+    # print(inds)
+    for i in inds:
+        g.vs[i]['gradient'] = 0
+
+    # input(g.vs['gradient'])
+
+    return g
+
+##########################################################
+def initialize_gradients(g, method='adhoc'):
+    """Initialize gradients with some distribution
+
+    Args:
+    g(igraph.Graph): graph instance
+
+    Returns:
+    igraph.Graph: graph instance with attribute 'gradient' updated
+    """
+    if method == 'adhoc':
+        return initialize_gradients_adhoc(g)
+    elif method == 'gaussian':
+        return initialize_gradients_gaussian(g)
+
+
 
 def step_mobility(g, particles, autoloop_prob):
     """Give a step in the mobility dynamic
@@ -47,8 +131,14 @@ def step_mobility(g, particles, autoloop_prob):
     for i, _ in enumerate(g.vs): # For each vertex
         numvparticles = len(particles_fixed[i])
         neighids = g.neighbors(i)
+        n = len(neighids)
         gradients = g.vs[neighids]['gradient']
-        gradients /= np.sum(gradients)
+        # print(gradients)
+        if np.sum(gradients) == 0:
+            gradients = np.ones(n) / n
+        else:
+            gradients /= np.sum(gradients)
+        # input(gradients)
 
         for j, partic in enumerate(particles_fixed[i]): # For each particle in this vertex
             if np.random.rand() <= autoloop_prob: continue
@@ -159,7 +249,7 @@ def main():
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s] %(message)s',
-    datefmt='%Y%m%d %H:%M', level=logging.DEBUG)
+    datefmt='%Y%m%d %H:%M', level=logging.INFO)
 
     cfg = pd.read_json(args.config, typ='series') # Load config
 
@@ -167,7 +257,7 @@ def main():
     if os.path.exists(outdir):
         ans = input(outdir + ' exists. Do you want to continue?')
         if ans.lower() not in ['y', 'yes']:
-            print('Aborting')
+            info('Aborting')
             return
     else:
         os.mkdir(outdir)
@@ -190,12 +280,14 @@ def main():
     totalnrecovered = [cfg.r0]
 
     g = igraph.Graph.Lattice(dim, cfg.nei, directed=False, mutual=True, circular=cfg.istoroid)
+    # visualize_static_graph(g, 'config/layouts_lattice.txt', outdir); input()
     layout = g.layout(cfg.plotlayout)
 
     ########################################################## Distrib. of particles
     nparticles = np.ndarray(nvertices, dtype=int)
     aux = np.random.rand(nvertices) # Uniform distrib
     nparticles = np.round(aux / (np.sum(aux)) *N).astype(int)
+
     diff = N - np.sum(nparticles) # Correct rounding differences on the final number
     for i in range(np.abs(diff)):
         idx = np.random.randint(nvertices)
@@ -208,10 +300,11 @@ def main():
         aux += nparticles[i]
 
     ########################################################## Distrib. of gradients
-    ids = np.random.randint(g.vcount(), size=2)
-    g.vs['gradient'] = 5
-    g.vs[ids[0]]['gradient'] = 1
-    g.vs[ids[1]]['gradient'] = 25
+    g = initialize_gradients(g, 'gaussian')
+    # ids = np.random.randint(g.vcount(), size=2)
+    # g.vs['gradient'] = 5
+    # g.vs[ids[0]]['gradient'] = 1
+    # g.vs[ids[1]]['gradient'] = 25
 
     ########################################################## Plot gradients
     maxgradients = np.max(g.vs['gradient'])
@@ -266,6 +359,7 @@ def main():
     plt.plot(totalnrecovered, 'b', label='Recovered')
     plt.legend()
     plt.savefig(pjoin(outdir, 'sir.png'))
+    info('Results are in ')
 
 if __name__ == "__main__":
     main()
