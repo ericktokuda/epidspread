@@ -1,0 +1,23 @@
+{
+	"mapw" : 99,
+	"maph" : 99,
+	"nei" : 1,
+	"istoroid" : true,
+	"nepochs" : 500,
+	"s0" : 1000,
+	"i0" : 5,
+	"r0" : 10,
+	"beta" : 0.5,
+	"gamma" : 0.5,
+	"graddist" : "gaussian",
+	"gradmean" : 0,
+	"gradstd" : 2,
+	"autoloop_prob" : 0.5,
+	"plotw" : 300,
+	"ploth" : 300,
+	"plotmargin" : 20,
+	"plotvsize" : 10,
+	"plotlayout" : "grid",
+	"plotrate" : 0,
+	"outdir" : "/tmp"
+}

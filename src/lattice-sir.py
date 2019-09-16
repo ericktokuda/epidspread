@@ -327,31 +327,27 @@ def main():
     g = initialize_gradients(g, cfg.graddist, cfg.gradmean, cfg.gradstd)
 
     ########################################################## Plot gradients
-    info('Generating plots for epoch 0')
+    if cfg.plotrate > 0:
+        info('Generating plots for epoch 0')
 
-    # input(g.vs['gradient'])
-    maxgradients = np.max(g.vs['gradient'])
-    gradientscolors = [[1, 1, 1]]*nvertices
-    gradsum = float(np.sum(g.vs['gradient']))
-    # print(len(g.vs['gradient']))
-    # input(g.vs['gradient'][1])
-    gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
-    # gradientslabels = [ '{:2.3f}'.format(x) for x in g.vs['gradient']]
-    outgradientspath = pjoin(outdir, 'gradients.png')
-    igraph.plot(g, target=outgradientspath, layout=layout,
-                vertex_label=gradientslabels,
-                vertex_color=gradientscolors, **visual)      
+        gradientscolors = [[1, 1, 1]]*nvertices
+        gradsum = float(np.sum(g.vs['gradient']))
+        gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
+        outgradientspath = pjoin(outdir, 'gradients.png')
+        igraph.plot(g, target=outgradientspath, layout=layout,
+                    vertex_label=gradientslabels,
+                    vertex_color=gradientscolors, **visual)      
 
-    b = 0.1 # For colors definition
-    ########################################################## Plot epoch 0
-    nsusceptibles, ninfected, nrecovered, \
-        _, _, _  = compute_statuses_sums(status, particles, nvertices, [], [], [])
-    plot_epoch_graphs(-1, g, layout, visual, status, nvertices, particles,
-                      N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
-                      totalnsusceptibles, totalninfected, totalnrecovered, outdir)
+        b = 0.1 # For colors definition
+        ########################################################## Plot epoch 0
+        nsusceptibles, ninfected, nrecovered, \
+            _, _, _  = compute_statuses_sums(status, particles, nvertices, [], [], [])
+        plot_epoch_graphs(-1, g, layout, visual, status, nvertices, particles,
+                          N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
+                          totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
     for ep in range(cfg.nepochs):
-        if ep % 100 == 0:
+        if ep % 1 == 0:
             info('t={}'.format(ep))
         particles = step_mobility(g, particles, cfg.autoloop_prob)
         status = step_transmission(g, status, cfg.beta, cfg.gamma, particles)
@@ -367,17 +363,18 @@ def main():
                               totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
     ########################################################## Enhance plots
-    cmd = "mogrify -gravity south -pointsize 24 " "-annotate +50+0 'GRADIENT' " \
-        "-annotate +350+0 'S' -annotate +650+0 'I' -annotate +950+0 'R' " \
-        "{}/concat*.png".format(outdir)
-    proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
-    stdout, stderr = proc.communicate()
+    if cfg.plotrate > 0:
+        cmd = "mogrify -gravity south -pointsize 24 " "-annotate +50+0 'GRADIENT' " \
+            "-annotate +350+0 'S' -annotate +650+0 'I' -annotate +950+0 'R' " \
+            "{}/concat*.png".format(outdir)
+        proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
+        stdout, stderr = proc.communicate()
 
-    animationpath = pjoin(outdir, 'animation.gif')
-    cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
-    proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
-    stdout, stderr = proc.communicate()
-    print(stderr)
+        animationpath = pjoin(outdir, 'animation.gif')
+        cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
+        proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
+        stdout, stderr = proc.communicate()
+        print(stderr)
 
     ########################################################## Export to csv
     info('Exporting S, I, R data')
