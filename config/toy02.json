@@ -1,8 +1,8 @@
 {
 	"mapw" : 2,
-	"maph" : 1,
+	"maph" : 2,
 	"nei" : 1,
-	"istoroid" : false,
+	"istoroid" : true,
 	"nepochs" : 100,
 	"s0" : 1,
 	"i0" : 1,
