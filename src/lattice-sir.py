@@ -4,7 +4,7 @@
 
 import argparse
 import logging
-import os
+import os, sys
 from os.path import join as pjoin
 from logging import debug, info
 
@@ -26,6 +26,7 @@ SUSCEPTIBLE = 0
 INFECTED = 1
 RECOVERED = 2
 EPSILON = 1E-5
+MAX = sys.maxsize
 
 def visualize_static_graph_layouts(g, layoutspath, outdir):
     layouts = [line.rstrip('\n') for line in open(layoutspath)]
@@ -59,21 +60,19 @@ def multivariate_normal(x, d, mean, cov):
             np.exp(-(np.linalg.solve(cov, x - mean).T.dot(x - mean)) / 2))
 
 ##########################################################
-def gaussian(x, mu, sig):
+def gaussian(xx, mu, sig):
     """pdf of the normal distrib"""
+    x = np.array(xx)
     return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
 ##########################################################
-def set_gaussian_weights_recursive(g, curid, dist, mu, sigma):
-    if g.vs[curid]['gradient'] != -1: return # Already set
-
-    newgrad = gaussian(dist, mu, sigma)
-    g.vs[curid]['gradient'] = newgrad
-    if newgrad < EPSILON: return # I'm discarding values below EPSILON
-
+def set_gaussian_weights_recursive(g, curid, nextvs, dist, mu, sigma):
+    supernewgrad = gaussian(dist+1, mu, sigma)
+    visitted.add(curid)
     for v in g.neighbors(curid):
-        set_gaussian_weights_recursive(g, v, dist+1, mu, sigma)
+        g.vs[v]['gradient'] = supernewgrad 
 
+    visitted.remove(curid)
 
 ##########################################################
 def initialize_gradients_gaussian(g, mu=0, sigma=1):
@@ -86,12 +85,11 @@ k
     igraph.Graph: graph instance with attribute 'gradient' updated
     """
 
-    g.vs['gradient'] = -1
     centeridx = int((g.vcount())/2)
-    set_gaussian_weights_recursive(g, centeridx, 0, mu, sigma)
-    inds = np.where(np.array(g.vs['gradient']) == -1)[0]
-    for i in inds:
-        g.vs[i]['gradient'] = 0
+    dists = g.shortest_paths(centeridx)
+    gauss = gaussian(dists, mu, sigma).flatten()
+    for v in range(len(gauss)):
+        g.vs[v]['gradient'] = gauss[v]
 
     return g
 
@@ -133,10 +131,15 @@ def step_mobility(g, particles, autoloop_prob):
         neighids = g.neighbors(i)
         n = len(neighids)
         gradients = g.vs[neighids]['gradient']
+
+        # print(gradients)
         if np.sum(gradients) == 0:
             gradients = np.ones(n) / n
         else:
             gradients /= np.sum(gradients)
+
+        # if np.max(gradients) > np.min(gradients):
+            # print(gradients)
 
         for j, partic in enumerate(particles_fixed[i]): # For each particle in this vertex
             if np.random.rand() <= autoloop_prob: continue
@@ -165,18 +168,20 @@ def step_transmission(g, status, beta, gamma, particles):
     for i, _ in enumerate(g.vs):
         statuses = statuses_fixed[particles[i]]
         N = len(statuses)
-        susceptible = statuses[statuses==SUSCEPTIBLE]            
-        infected = statuses[statuses==INFECTED]            
-        recovered = statuses[statuses==RECOVERED]
-
-        numnewinfected = round(beta * len(susceptible) * len(infected))
-        if numnewinfected > len(susceptible): numnewinfected = len(susceptible)
-        numnewrecovered = round(gamma*len(infected))
-        if numnewrecovered > len(infected): numnewrecovered = len(infected)
+        nsusceptible = len(statuses[statuses==SUSCEPTIBLE])
+        ninfected = len(statuses[statuses==INFECTED])
+        nrecovered = len(statuses[statuses==RECOVERED])
 
         indsusceptible = np.where(statuses_fixed==SUSCEPTIBLE)[0]
         indinfected = np.where(statuses_fixed==INFECTED)[0]
         indrecovered = np.where(statuses_fixed==RECOVERED)[0]
+
+        x  = np.random.rand(nsusceptible*ninfected)
+        y  = np.random.rand(ninfected)
+        numnewinfected = np.sum(x <= beta)
+        numnewrecovered = np.sum(y <= gamma)
+        if numnewinfected > nsusceptible: numnewinfected = nsusceptible
+        if numnewrecovered > ninfected: numnewrecovered = ninfected
 
         status[indsusceptible[0:numnewinfected]] = INFECTED
         status[indinfected[0:numnewrecovered]] = RECOVERED
@@ -297,7 +302,7 @@ def main():
                                                                   ))
     g = igraph.Graph.Lattice(dim, cfg.nei, directed=False, mutual=True, circular=cfg.istoroid)
 
-    visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
+    # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
     layout = g.layout(cfg.plotlayout)
 
     ########################################################## Distrib. of particles
@@ -323,10 +328,15 @@ def main():
 
     ########################################################## Plot gradients
     info('Generating plots for epoch 0')
+
+    # input(g.vs['gradient'])
     maxgradients = np.max(g.vs['gradient'])
     gradientscolors = [[1, 1, 1]]*nvertices
-    gradsum = np.sum(g.vs['gradient'])
+    gradsum = float(np.sum(g.vs['gradient']))
+    # print(len(g.vs['gradient']))
+    # input(g.vs['gradient'][1])
     gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
+    # gradientslabels = [ '{:2.3f}'.format(x) for x in g.vs['gradient']]
     outgradientspath = pjoin(outdir, 'gradients.png')
     igraph.plot(g, target=outgradientspath, layout=layout,
                 vertex_label=gradientslabels,
@@ -341,8 +351,8 @@ def main():
                       totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
     for ep in range(cfg.nepochs):
-        if ep % 100:
-            info('Epoch {}'.format(ep))
+        if ep % 100 == 0:
+            info('t={}'.format(ep))
         particles = step_mobility(g, particles, cfg.autoloop_prob)
         status = step_transmission(g, status, cfg.beta, cfg.gamma, particles)
       
@@ -372,7 +382,8 @@ def main():
     ########################################################## Export to csv
     info('Exporting S, I, R data')
     aux = np.array([totalnsusceptibles, totalninfected, totalnrecovered]).T
-    pd.DataFrame(aux).to_csv('/tmp/ou.csv')
+    pd.DataFrame(aux).to_csv(pjoin(outdir, 'sir.csv'), header=['S', 'I', 'R'],
+                             index=True, index_label='t')
 
     ########################################################## Plot SIR over time
     info('Generating plots for counts of S, I, R')
