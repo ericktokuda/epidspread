@@ -31,13 +31,16 @@ def visualize_static_graph_layouts(g, layoutspath, outdir):
     layouts = [line.rstrip('\n') for line in open(layoutspath)]
     for l in layouts:
         info(l)
-        igraph.plot(g, target=pjoin(outdir, l + '.png'), layout=g.layout(l),
-                    vertex_color='lightgrey',
-                    vertex_label=list(range(g.vcount())))
+        try:
+            igraph.plot(g, target=pjoin(outdir, l + '.png'), layout=g.layout(l),
+                        vertex_color='lightgrey',
+                        vertex_label=list(range(g.vcount())))
+        except Exception:
+            pass
 
 ########################################################## Distrib. of gradients
-def initialize_gradients_adhoc(g):
-    """Arbitrary initizalition of gradients
+def initialize_gradients_peak(g):
+    """Initizalition of gradients with a peak at 0
 
     Args:
     g(igraph.Graph): graph instance
@@ -45,10 +48,7 @@ def initialize_gradients_adhoc(g):
     Returns:
     igraph.Graph: graph instance with attribute 'gradient' updated
     """
-    ids = np.random.randint(g.vcount(), size=2)
-    g.vs['gradient'] = 5
-    g.vs[ids[0]]['gradient'] = 1
-    g.vs[ids[1]]['gradient'] = 25
+    g.vs[0]['gradient'] = 100
     return g
 
 ##########################################################
@@ -66,7 +66,6 @@ def gaussian(x, mu, sig):
 ##########################################################
 def set_gaussian_weights_recursive(g, curid, dist, mu, sigma):
     if g.vs[curid]['gradient'] != -1: return # Already set
-    # info('curid:{}'.format(curid))
 
     newgrad = gaussian(dist, mu, sigma)
     g.vs[curid]['gradient'] = newgrad
@@ -74,6 +73,7 @@ def set_gaussian_weights_recursive(g, curid, dist, mu, sigma):
 
     for v in g.neighbors(curid):
         set_gaussian_weights_recursive(g, v, dist+1, mu, sigma)
+
 
 ##########################################################
 def initialize_gradients_gaussian(g, mu=0, sigma=1):
@@ -87,7 +87,7 @@ k
     """
 
     g.vs['gradient'] = -1
-    centeridx = int((g.vcount())/2) + 1
+    centeridx = int((g.vcount())/2)
     set_gaussian_weights_recursive(g, centeridx, 0, mu, sigma)
     inds = np.where(np.array(g.vs['gradient']) == -1)[0]
     for i in inds:
@@ -96,7 +96,7 @@ k
     return g
 
 ##########################################################
-def initialize_gradients(g, method='adhoc'):
+def initialize_gradients(g, method='peak', mu=0, sigma=1):
     """Initialize gradients with some distribution
 
     Args:
@@ -105,12 +105,15 @@ def initialize_gradients(g, method='adhoc'):
     Returns:
     igraph.Graph: graph instance with attribute 'gradient' updated
     """
-    if method == 'adhoc':
-        return initialize_gradients_adhoc(g)
+
+    g.vs['gradient'] = 10
+
+    if method == 'uniform':
+        return g
+    if method == 'peak':
+        return initialize_gradients_peak(g)
     elif method == 'gaussian':
-        return initialize_gradients_gaussian(g)
-
-
+        return initialize_gradients_gaussian(g, mu, sigma)
 
 def step_mobility(g, particles, autoloop_prob):
     """Give a step in the mobility dynamic
@@ -130,15 +133,14 @@ def step_mobility(g, particles, autoloop_prob):
         neighids = g.neighbors(i)
         n = len(neighids)
         gradients = g.vs[neighids]['gradient']
-        # print(gradients)
         if np.sum(gradients) == 0:
             gradients = np.ones(n) / n
         else:
             gradients /= np.sum(gradients)
-        # input(gradients)
 
         for j, partic in enumerate(particles_fixed[i]): # For each particle in this vertex
             if np.random.rand() <= autoloop_prob: continue
+            if neighids == []: continue
             neighid = np.random.choice(neighids, p=gradients)
             particles[i].remove(partic)
             particles[neighid].append(partic)
@@ -203,20 +205,20 @@ def compute_statuses_sums(status, particles, nvertices, totalnsusceptibles,
     return nsusceptibles, ninfected, nrecovered, totalnsusceptibles, totalninfected, totalnrecovered
 ##########################################################
 def plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
-                      N, b, outgradientspath, nsusceptibles, ninfected, nrecovered, totalnsusceptibles,
-                      totalninfected, totalnrecovered, outdir):
+                      N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
+                      totalnsusceptibles, totalninfected, totalnrecovered, outdir):
     susceptiblecolor = []
     infectedcolor = []
     recoveredcolor = []
 
     for z in nsusceptibles:
-        zz = [math.log(z, N), 0, 0] if z != 0 else [0, 0, 0]
+        zz = [math.log(z, N), 0, 0] if z*N > 1 and N != 1 else [0, 0, 0] # Bug on log(1,1)
         susceptiblecolor.append(zz)
     for z in ninfected:
-        zz = [0, math.log(z, N), 0] if z != 0 else [0, 0, 0]
+        zz = [0, math.log(z, N), 0] if z*N > 1 else [0, 0, 0]
         infectedcolor.append(zz)
     for z in nrecovered:
-        zz = [0, 0,  math.log(z, N)] if z != 0 else [0, 0, 0]
+        zz = [0, 0,  math.log(z, N)] if z*N > 1 else [0, 0, 0]
         recoveredcolor.append(zz)  
         
     outsusceptiblepath = pjoin(outdir, 'susceptible{:02d}.png'.format(ep+1))
@@ -224,11 +226,11 @@ def plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
     outrecoveredpath = pjoin(outdir, 'recovered{:02d}.png'.format(ep+1))
 
     igraph.plot(g, target=outsusceptiblepath, layout=layout, vertex_label=nsusceptibles,
-                vertex_label_color='white', vertex_color=susceptiblecolor, **visual)      
+                vertex_label_color='white', vertex_shape='rectangle', vertex_color=susceptiblecolor, **visual)      
     igraph.plot(g, target=outinfectedpath, layout=layout, vertex_label=ninfected,
-                vertex_color=infectedcolor, vertex_label_color='white', **visual)      
+                vertex_label_color='white', vertex_shape='rectangle', vertex_color=infectedcolor, **visual)      
     igraph.plot(g, target=outrecoveredpath, layout=layout, vertex_label=nrecovered,
-                vertex_color=recoveredcolor, vertex_label_color='white', **visual)      
+                vertex_label_color='white', vertex_shape='rectangle', vertex_color=recoveredcolor, **visual)      
 
     outconcatpath = pjoin(outdir, 'concat{:02d}.png'.format(ep+1))
     proc = Popen('convert {} {} {} {} +append {}'.format(outgradientspath,
@@ -258,7 +260,7 @@ def main():
 
     cfg = pd.read_json(args.config, typ='series') # Load config
 
-    outdir = pjoin(cfg.outdir, datetime.now().strftime('%Y%m%d-%H%M'))
+    outdir = pjoin(cfg.outdir, datetime.now().strftime('%Y%m%d_%H%M') + '-latticesir')
     if os.path.exists(outdir):
         ans = input(outdir + ' exists. Do you want to continue? ')
         if ans.lower() not in ['y', 'yes']:
@@ -267,6 +269,8 @@ def main():
     else:
         os.mkdir(outdir)
 
+    info('Copying config file ...')
+    cfg.to_json(pjoin(outdir, os.path.basename(args.config)), force_ascii=False)
     dim = [cfg.mapw, cfg.maph]
     N = cfg.s0 + cfg.i0 + cfg.r0
     nvertices = cfg.mapw*cfg.maph # square lattice
@@ -315,13 +319,14 @@ def main():
 
     ########################################################## Distrib. of gradients
     info('Initializing gradients distribution ...')
-    g = initialize_gradients(g, 'gaussian')
+    g = initialize_gradients(g, cfg.graddist, cfg.gradmean, cfg.gradstd)
 
     ########################################################## Plot gradients
     info('Generating plots for epoch 0')
     maxgradients = np.max(g.vs['gradient'])
     gradientscolors = [[1, 1, 1]]*nvertices
-    gradientslabels = [ str(x/50) for x in g.vs['gradient']]
+    gradsum = np.sum(g.vs['gradient'])
+    gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
     outgradientspath = pjoin(outdir, 'gradients.png')
     igraph.plot(g, target=outgradientspath, layout=layout,
                 vertex_label=gradientslabels,
@@ -330,10 +335,7 @@ def main():
     b = 0.1 # For colors definition
     ########################################################## Plot epoch 0
     nsusceptibles, ninfected, nrecovered, \
-        totalnsusceptibles, totalninfected, \
-        totalnrecovered  = compute_statuses_sums(status, particles, nvertices,
-                                                 totalnsusceptibles, totalninfected,
-                                                 totalnrecovered)
+        _, _, _  = compute_statuses_sums(status, particles, nvertices, [], [], [])
     plot_epoch_graphs(-1, g, layout, visual, status, nvertices, particles,
                       N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
                       totalnsusceptibles, totalninfected, totalnrecovered, outdir)
@@ -366,6 +368,11 @@ def main():
     proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
     print(stderr)
+
+    ########################################################## Export to csv
+    info('Exporting S, I, R data')
+    aux = np.array([totalnsusceptibles, totalninfected, totalnrecovered]).T
+    pd.DataFrame(aux).to_csv('/tmp/ou.csv')
 
     ########################################################## Plot SIR over time
     info('Generating plots for counts of S, I, R')
