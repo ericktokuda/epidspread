@@ -1,6 +1,5 @@
 {
-	"mapw" : 1,
-	"maph" : 1,
+	"mapside" : 1,
 	"nei" : 1,
 	"istoroid" : false,
 	"nepochs" : 10,
@@ -13,10 +12,7 @@
 	"gradmean" : 0,
 	"gradstd" : 1,
 	"autoloop_prob" : 0,
-	"plotw" : 300,
-	"ploth" : 300,
-	"plotmargin" : 20,
-	"plotvsize" : 40,
+        "plotzoom" : 3,
 	"plotlayout" : "kk",
 	"plotrate" : 1,
 	"outdir" : "/tmp"

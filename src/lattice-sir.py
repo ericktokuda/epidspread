@@ -85,7 +85,11 @@ k
     igraph.Graph: graph instance with attribute 'gradient' updated
     """
 
-    centeridx = int((g.vcount())/2)
+    # centeridx = int((g.vcount())/2)
+    if g.vcount() % 2 == 0:
+        centeridx = int((g.vcount())/2 - np.sqrt(g.vcount())/2) 
+    else:
+        centeridx = int((g.vcount())/2)
     dists = g.shortest_paths(centeridx)
     gauss = gaussian(dists, mu, sigma).flatten()
     for v in range(len(gauss)):
@@ -132,14 +136,10 @@ def step_mobility(g, particles, autoloop_prob):
         n = len(neighids)
         gradients = g.vs[neighids]['gradient']
 
-        # print(gradients)
         if np.sum(gradients) == 0:
             gradients = np.ones(n) / n
         else:
             gradients /= np.sum(gradients)
-
-        # if np.max(gradients) > np.min(gradients):
-            # print(gradients)
 
         for j, partic in enumerate(particles_fixed[i]): # For each particle in this vertex
             if np.random.rand() <= autoloop_prob: continue
@@ -217,10 +217,10 @@ def plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
     recoveredcolor = []
 
     for z in nsusceptibles:
-        zz = [math.log(z, N), 0, 0] if z*N > 1 and N != 1 else [0, 0, 0] # Bug on log(1,1)
+        zz = [0, math.log(z, N), 0] if z*N > 1 else [0, 0, 0] # Bug on log(1,1)
         susceptiblecolor.append(zz)
     for z in ninfected:
-        zz = [0, math.log(z, N), 0] if z*N > 1 else [0, 0, 0]
+        zz = [math.log(z, N), 0, 0] if z*N > 1 else [0, 0, 0]
         infectedcolor.append(zz)
     for z in nrecovered:
         zz = [0, 0,  math.log(z, N)] if z*N > 1 else [0, 0, 0]
@@ -230,12 +230,9 @@ def plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
     outinfectedpath = pjoin(outdir, 'infected{:02d}.png'.format(ep+1))
     outrecoveredpath = pjoin(outdir, 'recovered{:02d}.png'.format(ep+1))
 
-    igraph.plot(g, target=outsusceptiblepath, layout=layout, vertex_label=nsusceptibles,
-                vertex_label_color='white', vertex_shape='rectangle', vertex_color=susceptiblecolor, **visual)      
-    igraph.plot(g, target=outinfectedpath, layout=layout, vertex_label=ninfected,
-                vertex_label_color='white', vertex_shape='rectangle', vertex_color=infectedcolor, **visual)      
-    igraph.plot(g, target=outrecoveredpath, layout=layout, vertex_label=nrecovered,
-                vertex_label_color='white', vertex_shape='rectangle', vertex_color=recoveredcolor, **visual)      
+    igraph.plot(g, target=outsusceptiblepath, layout=layout, vertex_shape='rectangle', vertex_color=susceptiblecolor, vertex_frame_width=0.0, **visual)      
+    igraph.plot(g, target=outinfectedpath, layout=layout, vertex_shape='rectangle', vertex_color=infectedcolor, vertex_frame_width=0.0, **visual)      
+    igraph.plot(g, target=outrecoveredpath, layout=layout, vertex_shape='rectangle', vertex_color=recoveredcolor, vertex_frame_width=0.0, **visual)      
 
     outconcatpath = pjoin(outdir, 'concat{:02d}.png'.format(ep+1))
     proc = Popen('convert {} {} {} {} +append {}'.format(outgradientspath,
@@ -276,9 +273,9 @@ def main():
 
     info('Copying config file ...')
     cfg.to_json(pjoin(outdir, os.path.basename(args.config)), force_ascii=False)
-    dim = [cfg.mapw, cfg.maph]
+    dim = [cfg.mapside, cfg.mapside]
     N = cfg.s0 + cfg.i0 + cfg.r0
-    nvertices = cfg.mapw*cfg.maph # square lattice
+    nvertices = cfg.mapside**2 # square lattice
     status = np.ndarray(N, dtype=int)
     status[0: cfg.s0] = SUSCEPTIBLE
     status[cfg.s0:cfg.s0+cfg.i0] = INFECTED
@@ -287,9 +284,9 @@ def main():
     info('Generated random distribution of S, I, R ...')
 
     visual = {}
-    visual["bbox"] = (cfg.plotw, cfg.ploth)
-    visual["margin"] = cfg.plotmargin
-    visual["vertex_size"] = cfg.plotvsize
+    visual["bbox"] = (cfg.mapside*10*cfg.plotzoom, cfg.mapside*10*cfg.plotzoom)
+    visual["margin"] = cfg.mapside*cfg.plotzoom
+    visual["vertex_size"] = 10*cfg.plotzoom
 
     totalnsusceptibles = [cfg.s0]
     totalninfected = [cfg.i0]
@@ -297,8 +294,8 @@ def main():
 
     aux = '' if cfg.istoroid else 'non-'
     info('Generating {}toroidal lattice with dim ({}, {}) ...'.format(aux,
-                                                                  cfg.mapw,
-                                                                  cfg.maph,
+                                                                  cfg.mapside,
+                                                                  cfg.mapside,
                                                                   ))
     g = igraph.Graph.Lattice(dim, cfg.nei, directed=False, mutual=True, circular=cfg.istoroid)
 
@@ -330,13 +327,18 @@ def main():
     if cfg.plotrate > 0:
         info('Generating plots for epoch 0')
 
-        gradientscolors = [[1, 1, 1]]*nvertices
+        aux = np.sum(g.vs['gradient'])
+        gradientscolors = [ [c, c, c] for c in g.vs['gradient']]
+        # gradientscolors = [1, 1, 1]*g.vs['gradient']
         gradsum = float(np.sum(g.vs['gradient']))
         gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
         outgradientspath = pjoin(outdir, 'gradients.png')
+        # igraph.plot(g, target=outgradientspath, layout=layout,
+                    # vertex_label=gradientslabels,
+                    # vertex_color=gradientscolors, **visual)      
         igraph.plot(g, target=outgradientspath, layout=layout,
-                    vertex_label=gradientslabels,
-                    vertex_color=gradientscolors, **visual)      
+                    vertex_shape='rectangle', vertex_color=gradientscolors,
+                    vertex_frame_width=0.0, **visual)      
 
         b = 0.1 # For colors definition
         ########################################################## Plot epoch 0
@@ -364,11 +366,11 @@ def main():
 
     ########################################################## Enhance plots
     if cfg.plotrate > 0:
-        cmd = "mogrify -gravity south -pointsize 24 " "-annotate +50+0 'GRADIENT' " \
-            "-annotate +350+0 'S' -annotate +650+0 'I' -annotate +950+0 'R' " \
-            "{}/concat*.png".format(outdir)
-        proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
-        stdout, stderr = proc.communicate()
+        # cmd = "mogrify -gravity south -pointsize 24 " "-annotate +50+0 'GRADIENT' " \
+            # "-annotate +350+0 'S' -annotate +650+0 'I' -annotate +950+0 'R' " \
+            # "{}/concat*.png".format(outdir)
+        # proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
+        # stdout, stderr = proc.communicate()
 
         animationpath = pjoin(outdir, 'animation.gif')
         cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
