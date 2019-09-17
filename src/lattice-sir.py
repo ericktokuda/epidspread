@@ -318,6 +318,7 @@ def main():
     for i in range(nvertices):
         particles[i] = list(range(aux, aux+nparticles[i]))
         aux += nparticles[i]
+    nparticlesstds = [np.std([len(x) for x in particles])]
 
     ########################################################## Distrib. of gradients
     info('Initializing gradients distribution ...')
@@ -333,9 +334,6 @@ def main():
         gradsum = float(np.sum(g.vs['gradient']))
         gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
         outgradientspath = pjoin(outdir, 'gradients.png')
-        # igraph.plot(g, target=outgradientspath, layout=layout,
-                    # vertex_label=gradientslabels,
-                    # vertex_color=gradientscolors, **visual)      
         igraph.plot(g, target=outgradientspath, layout=layout,
                     vertex_shape='rectangle', vertex_color=gradientscolors,
                     vertex_frame_width=0.0, **visual)      
@@ -349,9 +347,11 @@ def main():
                           totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
     for ep in range(cfg.nepochs):
-        if ep % 1 == 0:
+        if ep % 10 == 0:
             info('t={}'.format(ep))
         particles = step_mobility(g, particles, cfg.autoloop_prob)
+        aux = np.std([len(x) for x in particles])
+        nparticlesstds.append(aux)
         status = step_transmission(g, status, cfg.beta, cfg.gamma, particles)
       
         nsusceptibles, ninfected, nrecovered, \
@@ -380,8 +380,8 @@ def main():
 
     ########################################################## Export to csv
     info('Exporting S, I, R data')
-    aux = np.array([totalnsusceptibles, totalninfected, totalnrecovered]).T
-    pd.DataFrame(aux).to_csv(pjoin(outdir, 'sir.csv'), header=['S', 'I', 'R'],
+    aux = np.array([totalnsusceptibles, totalninfected, totalnrecovered, nparticlesstds]).T
+    pd.DataFrame(aux).to_csv(pjoin(outdir, 'sir.csv'), header=['S', 'I', 'R', 'nparticlesstd'],
                              index=True, index_label='t')
 
     ########################################################## Plot SIR over time

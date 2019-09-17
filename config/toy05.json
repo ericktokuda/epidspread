@@ -1,8 +1,8 @@
 {
-	"mapside" : 111,
+	"mapside" : 50,
 	"nei" : 1,
 	"istoroid" : true,
-	"nepochs" : 100,
+	"nepochs" : 5,
 	"s0" : 100,
 	"i0" : 11,
 	"r0" : 0,
