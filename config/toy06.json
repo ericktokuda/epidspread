@@ -2,7 +2,7 @@
         "mapside" : [100],
         "nei" : [1],
         "istoroid" : [true],
-        "nepochs" : [500],
+        "nepochs" : [2000],
         "s0" : [18000],
         "i0" : [2000],
         "r0" : [0],
@@ -10,13 +10,13 @@
         "gamma" : [0.5],
         "graddist" : ["gaussian"],
         "gradmean" : [0],
-        "gradstd" : [80],
+        "gradstd" : [10,20,30,40,50,60,70,80,90,100,200,500],
         "autoloop_prob" : [0.5],
         "plotzoom" : [1],
         "plotlayout" : ["grid"],
         "plotrate" : [0],
         "outdir" : ["/tmp"],
-        "nprocs" : [4],
+        "nprocs" : [7],
         "randomseed": [0,1,2]
 }
 
