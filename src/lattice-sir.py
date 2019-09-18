@@ -418,8 +418,9 @@ def plot_sir(s, i, r, fig, ax, outdir):
 def random_string(length=8):
     """Generate a random string of fixed length """
     letters = np.array(list(string.ascii_lowercase + ' '))
-    aux = np.random.choice(letters, size=length)
-    return ''.join(aux)
+    aux = ''.join(np.random.choice(letters, size=length))
+    aux.replace(' ', 'z')
+    return aux
 
 ##########################################################
 def main():
@@ -450,8 +451,7 @@ def main():
     fh.write(','.join(colnames) + '\n')
 
     for i in range(len(aux)):
-        hash = random_string(4)
-        print(hash)
+        hash = random_string(3)
         params.append(list(aux[i]) + [hash])
         pstr = [str(x) for x in [hash] + list(aux[i])]
         fh.write(','.join(pstr) + '\n')
