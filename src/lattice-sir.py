@@ -9,6 +9,7 @@ from os.path import join as pjoin
 from logging import debug, info
 from itertools import product
 
+import string
 import igraph
 import networkx as nx
 import numpy as np
@@ -64,13 +65,13 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
     cfg = pd.DataFrame.from_dict(cfgdict, 'index', columns=['data'])
 
     ########################################################## Cretate outdir
-    expidxstr = '{:03d}'.format(expidx)
-    outdir = pjoin(outdir, expidxstr)
+    # expidxstr = '{:03d}'.format(expidx)
+    outdir = pjoin(outdir, expidx)
 
     if not os.path.exists(outdir):
         os.mkdir(outdir)
     ##########################################################
-    info('exp:{} Copying config file ...'.format(expidxstr))
+    info('exp:{} Copying config file ...'.format(expidx))
     cfg['data'].to_json(pjoin(outdir, 'config.json'), force_ascii=False)
 
     dim = [mapside, mapside]
@@ -81,7 +82,7 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
     status[s0:s0+i0] = INFECTED
     status[s0+i0:] = RECOVERED
     np.random.shuffle(status)
-    info('exp:{} Generated random distribution of S, I, R ...'.format(expidxstr))
+    info('exp:{} Generated random distribution of S, I, R ...'.format(expidx))
 
     visual = {}
     visual["bbox"] = (mapside*10*plotzoom, mapside*10*plotzoom)
@@ -93,7 +94,7 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
     totalnrecovered = [r0]
 
     aux = '' if istoroid else 'non-'
-    info('exp:{} Generating {}toroidal lattice with dim ({}, {}) ...'.format(expidxstr,
+    info('exp:{} Generating {}toroidal lattice with dim ({}, {}) ...'.format(expidx,
                                                                              aux,
                                                                              mapside,
                                                                              mapside,
@@ -104,7 +105,7 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
     layout = g.layout(plotlayout)
 
     ########################################################## Distrib. of particles
-    info('exp:{} Generating uniform distribution of agents in the lattice ...'.format(expidxstr))
+    info('exp:{} Generating uniform distribution of agents in the lattice ...'.format(expidx))
     nparticles = np.ndarray(nvertices, dtype=int)
     aux = np.random.rand(nvertices) # Uniform distrib
     nparticles = np.round(aux / (np.sum(aux)) *N).astype(int)
@@ -122,12 +123,12 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
     nparticlesstds = [np.std([len(x) for x in particles])]
 
     ########################################################## Distrib. of gradients
-    info('exp:{} Initializing gradients distribution ...'.format(expidxstr))
+    info('exp:{} Initializing gradients distribution ...'.format(expidx))
     g = initialize_gradients(g, graddist, gradmean, gradstd)
 
     ########################################################## Plot gradients
     if plotrate > 0:
-        info('exp:{} Generating plots for epoch 0'.format(expidxstr))
+        info('exp:{} Generating plots for epoch 0'.format(expidx))
 
         aux = np.sum(g.vs['gradient'])
         gradientscolors = [ [c, c, c] for c in g.vs['gradient']]
@@ -149,7 +150,7 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
 
     for ep in range(nepochs):
         if ep % 10 == 0:
-            info('exp:{}, t:{}'.format(expidxstr, ep))
+            info('exp:{}, t:{}'.format(expidx, ep))
         particles = step_mobility(g, particles, autoloop_prob)
         aux = np.std([len(x) for x in particles])
         nparticlesstds.append(aux)
@@ -180,16 +181,16 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
         print(stderr)
 
     ########################################################## Export to csv
-    info('exp:{} Exporting S, I, R data'.format(expidxstr))
+    info('exp:{} Exporting S, I, R data'.format(expidx))
     aux = np.array([totalnsusceptibles, totalninfected, totalnrecovered, nparticlesstds]).T
     pd.DataFrame(aux).to_csv(pjoin(outdir, 'sir.csv'), header=['S', 'I', 'R', 'nparticlesstd'],
                              index=True, index_label='t')
 
     ########################################################## Plot SIR over time
-    info('exp:{} Generating plots for counts of S, I, R'.format(expidxstr))
+    info('exp:{} Generating plots for counts of S, I, R'.format(expidx))
     fig, ax = plt.subplots(1, 1)
     plot_sir(totalnsusceptibles, totalninfected, totalnrecovered, fig, ax, outdir)
-    info('exp:{} Finished. Results are in {}'.format(expidxstr, outdir))
+    info('exp:{} Finished. Results are in {}'.format(expidx, outdir))
 
 def visualize_static_graph_layouts(g, layoutspath, outdir):
     layouts = [line.rstrip('\n') for line in open(layoutspath)]
@@ -414,6 +415,12 @@ def plot_sir(s, i, r, fig, ax, outdir):
     ax.legend()
     fig.savefig(pjoin(outdir, 'sir.png'))
 
+def random_string(length=8):
+    """Generate a random string of fixed length """
+    letters = np.array(list(string.ascii_lowercase + ' '))
+    aux = np.random.choice(letters, size=length)
+    return ''.join(aux)
+
 ##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -443,8 +450,10 @@ def main():
     fh.write(','.join(colnames) + '\n')
 
     for i in range(len(aux)):
-        params.append(list(aux[i]) + [i])
-        pstr = [str(x) for x in [i] + list(aux[i])]
+        hash = random_string(4)
+        print(hash)
+        params.append(list(aux[i]) + [hash])
+        pstr = [str(x) for x in [hash] + list(aux[i])]
         fh.write(','.join(pstr) + '\n')
     fh.close()
 
