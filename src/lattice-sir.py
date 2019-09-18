@@ -7,6 +7,7 @@ import logging
 import os, sys
 from os.path import join as pjoin
 from logging import debug, info
+from itertools import product
 
 import igraph
 import networkx as nx
@@ -19,6 +20,7 @@ from mpl_toolkits import mplot3d
 import math
 from subprocess import Popen, PIPE
 from datetime import datetime
+from multiprocessing import Pool
 
 
 ########################################################## Defines
@@ -27,6 +29,167 @@ INFECTED = 1
 RECOVERED = 2
 EPSILON = 1E-5
 MAX = sys.maxsize
+
+#############################################################
+def run_one_experiment_given_list(l):
+    run_lattice_sir(*l)
+
+##########################################################
+def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
+                    beta, gamma , graddist , gradmean , gradstd ,
+                    autoloop_prob , plotzoom , plotlayout , plotrate , outdir ,
+                    nprocs , randomseed, expidx):
+    """Main function
+
+    Args:
+    params
+
+    Returns:
+    ret
+    """
+
+
+    cfgdict = {}
+    keys = ['mapside', 'nei', 'istoroid' , 'nepochs' , 's0' , 'i0' , 'r0' ,
+            'beta', 'gamma' , 'graddist' , 'gradmean' , 'gradstd' ,
+            'autoloop_prob' , 'plotzoom' , 'plotlayout' , 'plotrate' , 'outdir' ,
+            'nprocs' , 'randomseed']
+    args = [mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
+            beta, gamma , graddist , gradmean , gradstd ,
+            autoloop_prob , plotzoom , plotlayout , plotrate , outdir ,
+            nprocs , randomseed]
+    for i, k in enumerate(keys):
+        cfgdict[k] = args[i]
+
+    cfg = pd.DataFrame.from_dict(cfgdict, 'index', columns=['data'])
+
+    ########################################################## Cretate outdir
+    expidxstr = '{:03d}'.format(expidx)
+    outdir = pjoin(outdir, expidxstr)
+
+    if not os.path.exists(outdir):
+        os.mkdir(outdir)
+    ##########################################################
+    info('exp:{} Copying config file ...'.format(expidxstr))
+    cfg['data'].to_json(pjoin(outdir, 'config.json'), force_ascii=False)
+
+    dim = [mapside, mapside]
+    N = s0 + i0 + r0
+    nvertices = mapside**2 # square lattice
+    status = np.ndarray(N, dtype=int)
+    status[0: s0] = SUSCEPTIBLE
+    status[s0:s0+i0] = INFECTED
+    status[s0+i0:] = RECOVERED
+    np.random.shuffle(status)
+    info('exp:{} Generated random distribution of S, I, R ...'.format(expidxstr))
+
+    visual = {}
+    visual["bbox"] = (mapside*10*plotzoom, mapside*10*plotzoom)
+    visual["margin"] = mapside*plotzoom
+    visual["vertex_size"] = 10*plotzoom
+
+    totalnsusceptibles = [s0]
+    totalninfected = [i0]
+    totalnrecovered = [r0]
+
+    aux = '' if istoroid else 'non-'
+    info('exp:{} Generating {}toroidal lattice with dim ({}, {}) ...'.format(expidxstr,
+                                                                             aux,
+                                                                             mapside,
+                                                                             mapside,
+                                                                             ))
+    g = igraph.Graph.Lattice(dim, nei, directed=False, mutual=True, circular=istoroid)
+
+    # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
+    layout = g.layout(plotlayout)
+
+    ########################################################## Distrib. of particles
+    info('exp:{} Generating uniform distribution of agents in the lattice ...'.format(expidxstr))
+    nparticles = np.ndarray(nvertices, dtype=int)
+    aux = np.random.rand(nvertices) # Uniform distrib
+    nparticles = np.round(aux / (np.sum(aux)) *N).astype(int)
+
+    diff = N - np.sum(nparticles) # Correct rounding differences on the final number
+    for i in range(np.abs(diff)):
+        idx = np.random.randint(nvertices)
+        nparticles[idx] += np.sign(diff) # Initialize number of particles per vertex
+
+    particles = [None]*nvertices # Initialize indices of particles per vertex
+    aux = 0
+    for i in range(nvertices):
+        particles[i] = list(range(aux, aux+nparticles[i]))
+        aux += nparticles[i]
+    nparticlesstds = [np.std([len(x) for x in particles])]
+
+    ########################################################## Distrib. of gradients
+    info('exp:{} Initializing gradients distribution ...'.format(expidxstr))
+    g = initialize_gradients(g, graddist, gradmean, gradstd)
+
+    ########################################################## Plot gradients
+    if plotrate > 0:
+        info('exp:{} Generating plots for epoch 0'.format(expidxstr))
+
+        aux = np.sum(g.vs['gradient'])
+        gradientscolors = [ [c, c, c] for c in g.vs['gradient']]
+        # gradientscolors = [1, 1, 1]*g.vs['gradient']
+        gradsum = float(np.sum(g.vs['gradient']))
+        gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
+        outgradientspath = pjoin(outdir, 'gradients.png')
+        igraph.plot(g, target=outgradientspath, layout=layout,
+                    vertex_shape='rectangle', vertex_color=gradientscolors,
+                    vertex_frame_width=0.0, **visual)      
+
+        b = 0.1 # For colors definition
+        ########################################################## Plot epoch 0
+        nsusceptibles, ninfected, nrecovered, \
+            _, _, _  = compute_statuses_sums(status, particles, nvertices, [], [], [])
+        plot_epoch_graphs(-1, g, layout, visual, status, nvertices, particles,
+                          N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
+                          totalnsusceptibles, totalninfected, totalnrecovered, outdir)
+
+    for ep in range(nepochs):
+        if ep % 10 == 0:
+            info('exp:{}, t:{}'.format(expidxstr, ep))
+        particles = step_mobility(g, particles, autoloop_prob)
+        aux = np.std([len(x) for x in particles])
+        nparticlesstds.append(aux)
+        status = step_transmission(g, status, beta, gamma, particles)
+      
+        nsusceptibles, ninfected, nrecovered, \
+            totalnsusceptibles, totalninfected, \
+            totalnrecovered  = compute_statuses_sums(status, particles, nvertices,
+                                                     totalnsusceptibles, totalninfected,
+                                                     totalnrecovered)
+        if plotrate > 0 and ep % plotrate == 0:
+            plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
+                              N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
+                              totalnsusceptibles, totalninfected, totalnrecovered, outdir)
+
+    ########################################################## Enhance plots
+    if plotrate > 0:
+        # cmd = "mogrify -gravity south -pointsize 24 " "-annotate +50+0 'GRADIENT' " \
+            # "-annotate +350+0 'S' -annotate +650+0 'I' -annotate +950+0 'R' " \
+            # "{}/concat*.png".format(outdir)
+        # proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
+        # stdout, stderr = proc.communicate()
+
+        animationpath = pjoin(outdir, 'animation.gif')
+        cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
+        proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
+        stdout, stderr = proc.communicate()
+        print(stderr)
+
+    ########################################################## Export to csv
+    info('exp:{} Exporting S, I, R data'.format(expidxstr))
+    aux = np.array([totalnsusceptibles, totalninfected, totalnrecovered, nparticlesstds]).T
+    pd.DataFrame(aux).to_csv(pjoin(outdir, 'sir.csv'), header=['S', 'I', 'R', 'nparticlesstd'],
+                             index=True, index_label='t')
+
+    ########################################################## Plot SIR over time
+    info('exp:{} Generating plots for counts of S, I, R'.format(expidxstr))
+    fig, ax = plt.subplots(1, 1)
+    plot_sir(totalnsusceptibles, totalninfected, totalnrecovered, fig, ax, outdir)
+    info('exp:{} Finished. Results are in {}'.format(expidxstr, outdir))
 
 def visualize_static_graph_layouts(g, layoutspath, outdir):
     layouts = [line.rstrip('\n') for line in open(layoutspath)]
@@ -262,7 +425,7 @@ def main():
 
     cfg = pd.read_json(args.config, typ='series') # Load config
 
-    outdir = pjoin(cfg.outdir, datetime.now().strftime('%Y%m%d_%H%M') + '-latticesir')
+    outdir = pjoin(cfg.outdir[0], datetime.now().strftime('%Y%m%d_%H%M') + '-latticesir')
     if os.path.exists(outdir):
         ans = input(outdir + ' exists. Do you want to continue? ')
         if ans.lower() not in ['y', 'yes']:
@@ -271,124 +434,26 @@ def main():
     else:
         os.mkdir(outdir)
 
-    info('Copying config file ...')
-    cfg.to_json(pjoin(outdir, os.path.basename(args.config)), force_ascii=False)
-    dim = [cfg.mapside, cfg.mapside]
-    N = cfg.s0 + cfg.i0 + cfg.r0
-    nvertices = cfg.mapside**2 # square lattice
-    status = np.ndarray(N, dtype=int)
-    status[0: cfg.s0] = SUSCEPTIBLE
-    status[cfg.s0:cfg.s0+cfg.i0] = INFECTED
-    status[cfg.s0+cfg.i0:] = RECOVERED
-    np.random.shuffle(status)
-    info('Generated random distribution of S, I, R ...')
+    cfg.outdir = [outdir]
 
-    visual = {}
-    visual["bbox"] = (cfg.mapside*10*cfg.plotzoom, cfg.mapside*10*cfg.plotzoom)
-    visual["margin"] = cfg.mapside*cfg.plotzoom
-    visual["vertex_size"] = 10*cfg.plotzoom
+    aux = list(product(*cfg))
+    params = []
+    fh = open(pjoin(outdir, 'exps.csv'), 'w')
+    colnames = ['idx'] + (list(cfg.index))
+    fh.write(','.join(colnames) + '\n')
 
-    totalnsusceptibles = [cfg.s0]
-    totalninfected = [cfg.i0]
-    totalnrecovered = [cfg.r0]
+    for i in range(len(aux)):
+        params.append(list(aux[i]) + [i])
+        pstr = [str(x) for x in [i] + list(aux[i])]
+        fh.write(','.join(pstr) + '\n')
+    fh.close()
 
-    aux = '' if cfg.istoroid else 'non-'
-    info('Generating {}toroidal lattice with dim ({}, {}) ...'.format(aux,
-                                                                  cfg.mapside,
-                                                                  cfg.mapside,
-                                                                  ))
-    g = igraph.Graph.Lattice(dim, cfg.nei, directed=False, mutual=True, circular=cfg.istoroid)
+    if cfg.nprocs[0] <= 1:
+        [ run_one_experiment_given_list(p) for p in params ]
+    else:
+        pool = Pool(cfg.nprocs[0])
+        pool.map(run_one_experiment_given_list, params)
 
-    # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
-    layout = g.layout(cfg.plotlayout)
-
-    ########################################################## Distrib. of particles
-    info('Generating uniform distribution of agents in the lattice ...')
-    nparticles = np.ndarray(nvertices, dtype=int)
-    aux = np.random.rand(nvertices) # Uniform distrib
-    nparticles = np.round(aux / (np.sum(aux)) *N).astype(int)
-
-    diff = N - np.sum(nparticles) # Correct rounding differences on the final number
-    for i in range(np.abs(diff)):
-        idx = np.random.randint(nvertices)
-        nparticles[idx] += np.sign(diff) # Initialize number of particles per vertex
-
-    particles = [None]*nvertices # Initialize indices of particles per vertex
-    aux = 0
-    for i in range(nvertices):
-        particles[i] = list(range(aux, aux+nparticles[i]))
-        aux += nparticles[i]
-    nparticlesstds = [np.std([len(x) for x in particles])]
-
-    ########################################################## Distrib. of gradients
-    info('Initializing gradients distribution ...')
-    g = initialize_gradients(g, cfg.graddist, cfg.gradmean, cfg.gradstd)
-
-    ########################################################## Plot gradients
-    if cfg.plotrate > 0:
-        info('Generating plots for epoch 0')
-
-        aux = np.sum(g.vs['gradient'])
-        gradientscolors = [ [c, c, c] for c in g.vs['gradient']]
-        # gradientscolors = [1, 1, 1]*g.vs['gradient']
-        gradsum = float(np.sum(g.vs['gradient']))
-        gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
-        outgradientspath = pjoin(outdir, 'gradients.png')
-        igraph.plot(g, target=outgradientspath, layout=layout,
-                    vertex_shape='rectangle', vertex_color=gradientscolors,
-                    vertex_frame_width=0.0, **visual)      
-
-        b = 0.1 # For colors definition
-        ########################################################## Plot epoch 0
-        nsusceptibles, ninfected, nrecovered, \
-            _, _, _  = compute_statuses_sums(status, particles, nvertices, [], [], [])
-        plot_epoch_graphs(-1, g, layout, visual, status, nvertices, particles,
-                          N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
-                          totalnsusceptibles, totalninfected, totalnrecovered, outdir)
-
-    for ep in range(cfg.nepochs):
-        if ep % 10 == 0:
-            info('t={}'.format(ep))
-        particles = step_mobility(g, particles, cfg.autoloop_prob)
-        aux = np.std([len(x) for x in particles])
-        nparticlesstds.append(aux)
-        status = step_transmission(g, status, cfg.beta, cfg.gamma, particles)
-      
-        nsusceptibles, ninfected, nrecovered, \
-            totalnsusceptibles, totalninfected, \
-            totalnrecovered  = compute_statuses_sums(status, particles, nvertices,
-                                                     totalnsusceptibles, totalninfected,
-                                                     totalnrecovered)
-        if cfg.plotrate > 0 and ep % cfg.plotrate == 0:
-            plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
-                              N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
-                              totalnsusceptibles, totalninfected, totalnrecovered, outdir)
-
-    ########################################################## Enhance plots
-    if cfg.plotrate > 0:
-        # cmd = "mogrify -gravity south -pointsize 24 " "-annotate +50+0 'GRADIENT' " \
-            # "-annotate +350+0 'S' -annotate +650+0 'I' -annotate +950+0 'R' " \
-            # "{}/concat*.png".format(outdir)
-        # proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
-        # stdout, stderr = proc.communicate()
-
-        animationpath = pjoin(outdir, 'animation.gif')
-        cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
-        proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
-        stdout, stderr = proc.communicate()
-        print(stderr)
-
-    ########################################################## Export to csv
-    info('Exporting S, I, R data')
-    aux = np.array([totalnsusceptibles, totalninfected, totalnrecovered, nparticlesstds]).T
-    pd.DataFrame(aux).to_csv(pjoin(outdir, 'sir.csv'), header=['S', 'I', 'R', 'nparticlesstd'],
-                             index=True, index_label='t')
-
-    ########################################################## Plot SIR over time
-    info('Generating plots for counts of S, I, R')
-    fig, ax = plt.subplots(1, 1)
-    plot_sir(totalnsusceptibles, totalninfected, totalnrecovered, fig, ax, outdir)
-    info('Finished. Results are in {}'.format(outdir))
 
 if __name__ == "__main__":
     main()
