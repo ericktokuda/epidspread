@@ -419,9 +419,7 @@ def random_string(length=8):
     """Generate a random string of fixed length """
     letters = np.array(list(string.ascii_lowercase + ' '))
     aux = ''.join(np.random.choice(letters, size=length))
-    aux.replace(' ', 'z')
-    return aux
-
+    return aux.replace(' ', 'z')
 ##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
