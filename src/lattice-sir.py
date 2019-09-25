@@ -32,6 +32,73 @@ RECOVERED = 2
 EPSILON = 1E-5
 MAX = sys.maxsize
 
+
+#############################################################
+def get_4connected_neighbours_2d(i, j, n, thoroidal=False):
+    """Get 4-connected neighbours. It does not check if there are repeated entries (2x2 or 1x1)
+
+    Args:
+    i(int): row of the matrix
+    j(int): column of the matrix
+    n(int): side of the square matrix
+
+    Returns:
+    ndarray 4x2: 4 neighbours indices
+    """
+    inds = []
+    if j > 0: # left
+        inds.append([i, j-1])
+    elif thoroidal:
+        inds.append([i, n-1])
+
+    if j < n-1: # right
+        inds.append([i, j+1])
+    elif thoroidal:
+        inds.append([i, 0])
+
+    if i > 0: # top
+        inds.append([i-1, j])
+    elif thoroidal:
+        inds.append([n-1, j])
+
+    if i < n-1: # bottom
+        inds.append([i+1, j])
+    elif thoroidal:
+        inds.append([0, j])
+
+    return np.array(inds)
+
+#############################################################
+def generate_lattice(n, thoroidal=False, s=10):
+    """Generate 2d lattice of side n
+
+    Args:
+    n(int): side of the lattice
+    thoroidal(bool): thoroidal lattice
+    s(float): edge size
+
+    Returns:
+    ndarray nx2, ndarray nxn: positions and adjacency matrix (triangular)
+    """
+    n2 = n*n
+    pos = np.ndarray((n2, 2), dtype=float)
+    adj = np.zeros((n2, n2), dtype=int)
+
+    k = 0
+    for j in range(n):
+        for i in range(n): # Set positions
+            pos[k] = [i*s, j*s]
+            k += 1
+
+    for i in range(n): # Set connectivity
+        for j in range(n):
+            neighs2d = get_4connected_neighbours_2d(i, j, n, thoroidal)
+            neighids = np.ravel_multi_index((neighs2d[:, 0], neighs2d[:, 1]), (n, n))
+            curidx = np.ravel_multi_index((i, j), (n, n))
+
+            for neigh in neighids:
+                adj[curidx, neigh] = 1
+    return pos, adj
 #############################################################
 def run_one_experiment_given_list(l):
     run_lattice_sir(*l)
@@ -100,7 +167,10 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
                                                                              mapside,
                                                                              mapside,
                                                                              ))
-    g = igraph.Graph.Lattice(dim, nei, directed=False, mutual=True, circular=istoroid)
+
+    z, adj = generate_lattice(mapside, True)
+    g = igraph.Graph.Adjacency(adj.tolist(), mode=igraph.ADJ_UNDIRECTED)
+    # g = igraph.Graph.Lattice(dim, nei, directed=False, mutual=True, circular=istoroid)
 
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
     layout = g.layout(plotlayout)
@@ -153,7 +223,8 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
                           N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
                           totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
-    for ep in range(nepochs):
+    maxepoch = nepochs if nepochs > 0 else MAX
+    for ep in range(maxepoch):
         if ep % 10 == 0:
             info('exp:{}, t:{}'.format(expidx, ep))
         particles = step_mobility(g, particles, autoloop_prob)
@@ -167,6 +238,9 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
             totalnrecovered  = compute_statuses_sums(status, particles, nvertices,
                                                      totalnsusceptibles, totalninfected,
                                                      totalnrecovered)
+
+        if nepochs == -1 and np.sum(status==INFECTED) == 0: break
+
         if plotrate > 0 and ep % plotrate == 0:
             plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
                               N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
@@ -188,7 +262,6 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
 
     ########################################################## Export to csv
     info('exp:{} Exporting transmissions locations...'.format(expidx))
-    print(aux)
     aux = pd.DataFrame(ntransmissions)
     aux.to_csv(pjoin(outdir, 'ntranmissions.csv'), index=False, header=['ntransmission'])
     ########################################################## Export to csv
@@ -358,7 +431,6 @@ def step_transmission(g, status, beta, gamma, particles, ntransmissions):
         if numnewinfected > nsusceptible: numnewinfected = nsusceptible
         if numnewrecovered > ninfected: numnewrecovered = ninfected
 
-        print(numnewinfected)
         ntransmissions[i] += numnewinfected
         status[indsusceptible[0:numnewinfected]] = INFECTED
         status[indinfected[0:numnewrecovered]] = RECOVERED
@@ -455,6 +527,7 @@ def main():
 
     cfg.outdir = [outdir]
 
+    
     aux = list(product(*cfg))
     params = []
     fh = open(pjoin(outdir, 'exps.csv'), 'w')
