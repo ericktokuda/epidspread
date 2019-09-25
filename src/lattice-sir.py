@@ -105,7 +105,7 @@ def run_one_experiment_given_list(l):
 
 ##########################################################
 def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
-                    beta, gamma , graddist , gradmean , gradstd ,
+                    beta, gamma , graddist , gradstd ,
                     autoloop_prob , plotzoom , plotlayout , plotrate , outdir ,
                     nprocs , randomseed, expidx):
     """Main function
@@ -120,11 +120,11 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
 
     cfgdict = {}
     keys = ['mapside', 'nei', 'istoroid' , 'nepochs' , 's0' , 'i0' , 'r0' ,
-            'beta', 'gamma' , 'graddist' , 'gradmean' , 'gradstd' ,
+            'beta', 'gamma' , 'graddist' , 'gradstd' ,
             'autoloop_prob' , 'plotzoom' , 'plotlayout' , 'plotrate' , 'outdir' ,
             'nprocs' , 'randomseed']
     args = [mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
-            beta, gamma , graddist , gradmean , gradstd ,
+            beta, gamma , graddist , gradstd ,
             autoloop_prob , plotzoom , plotlayout , plotrate , outdir ,
             nprocs , randomseed]
     for i, k in enumerate(keys):
@@ -168,8 +168,10 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
                                                                              mapside,
                                                                              ))
 
-    z, adj = generate_lattice(mapside, True)
+    pos, adj = generate_lattice(mapside, True)
     g = igraph.Graph.Adjacency(adj.tolist(), mode=igraph.ADJ_UNDIRECTED)
+    g.vs['x'] = pos[:, 0]
+    g.vs['y'] = pos[:, 1]
     # g = igraph.Graph.Lattice(dim, nei, directed=False, mutual=True, circular=istoroid)
 
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
@@ -196,10 +198,14 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
 
     ########################################################## Distrib. of gradients
     info('exp:{} Initializing gradients distribution ...'.format(expidx))
-    g = initialize_gradients(g, graddist, gradmean, gradstd)
+    g = initialize_gradients(g, graddist, gradstd)
     info('exp:{} Exporting relief map...'.format(expidx))
-    aux = pd.DataFrame(g.vs['gradient'])
-    aux.to_csv(pjoin(outdir, 'attraction.csv'), index=False, header=['gradient'])
+    # aux = pd.DataFrame(g.vs['gradient'])
+    aux = pd.DataFrame()
+    aux['x'] = g.vs['x']
+    aux['y'] = g.vs['y']
+    aux['gradient'] = g.vs['gradient']
+    aux.to_csv(pjoin(outdir, 'attraction.csv'), index=False, header=['x', 'y', 'gradient'])
 
     ########################################################## Plot gradients
     if plotrate > 0:
@@ -323,7 +329,7 @@ def set_gaussian_weights_recursive(g, curid, nextvs, dist, mu, sigma):
     visitted.remove(curid)
 
 ##########################################################
-def initialize_gradients_gaussian(g, mu=0, sigma=1):
+def initialize_gradients_gaussian_on_graph(g, mu=0, sigma=1):
     """Initizalition of gradients with a single gaussian
 
     Args:
@@ -346,7 +352,24 @@ k
     return g
 
 ##########################################################
-def initialize_gradients(g, method='peak', mu=0, sigma=1):
+def initialize_gradients_gaussian(g, mu, cov):
+    """Initizalition of gradients with a single gaussian
+
+    Args:
+    g(igraph.Graph): graph instance
+k
+    Returns:
+    igraph.Graph: graph instance with attribute 'gradient' updated
+    """
+
+    for i, v in enumerate(g.vs):
+        g.vs[i]['gradient'] = multivariate_normal(np.array([v['x'], v['y']]),
+                                                  2, mu, cov)
+
+    return g
+
+##########################################################
+def initialize_gradients(g, method='peak', sigma=1):
     """Initialize gradients with some distribution
 
     Args:
@@ -363,7 +386,10 @@ def initialize_gradients(g, method='peak', mu=0, sigma=1):
     if method == 'peak':
         return initialize_gradients_peak(g)
     elif method == 'gaussian':
-        return initialize_gradients_gaussian(g, mu, sigma)
+        aux = np.max(g.vs['x'])
+        mu = np.array(aux/2, aux/2)
+        cov = np.eye(2) * sigma
+        return initialize_gradients_gaussian(g, mu, cov)
 
 def step_mobility(g, particles, autoloop_prob):
     """Give a step in the mobility dynamic
