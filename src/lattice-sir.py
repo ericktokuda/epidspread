@@ -22,6 +22,7 @@ import math
 from subprocess import Popen, PIPE
 from datetime import datetime
 from multiprocessing import Pool
+import pickle as pkl
 
 
 ########################################################## Defines
@@ -125,6 +126,9 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
     ########################################################## Distrib. of gradients
     info('exp:{} Initializing gradients distribution ...'.format(expidx))
     g = initialize_gradients(g, graddist, gradmean, gradstd)
+    aux = pd.DataFrame(g.vs['gradient'])
+    aux.to_csv(pjoin(outdir, 'attraction.csv'), index=False, header=['gradient'])
+
 
     ########################################################## Plot gradients
     if plotrate > 0:
