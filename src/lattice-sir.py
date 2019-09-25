@@ -105,6 +105,7 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
     layout = g.layout(plotlayout)
 
+    ntransmissions = np.zeros(nvertices, dtype=int)
     ########################################################## Distrib. of particles
     info('exp:{} Generating uniform distribution of agents in the lattice ...'.format(expidx))
     nparticles = np.ndarray(nvertices, dtype=int)
@@ -126,9 +127,9 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
     ########################################################## Distrib. of gradients
     info('exp:{} Initializing gradients distribution ...'.format(expidx))
     g = initialize_gradients(g, graddist, gradmean, gradstd)
+    info('exp:{} Exporting relief map...'.format(expidx))
     aux = pd.DataFrame(g.vs['gradient'])
     aux.to_csv(pjoin(outdir, 'attraction.csv'), index=False, header=['gradient'])
-
 
     ########################################################## Plot gradients
     if plotrate > 0:
@@ -158,7 +159,8 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
         particles = step_mobility(g, particles, autoloop_prob)
         aux = np.std([len(x) for x in particles])
         nparticlesstds.append(aux)
-        status = step_transmission(g, status, beta, gamma, particles)
+        status, ntransmissions = step_transmission(g, status, beta, gamma, particles,
+                                                      ntransmissions)
       
         nsusceptibles, ninfected, nrecovered, \
             totalnsusceptibles, totalninfected, \
@@ -184,6 +186,11 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
         stdout, stderr = proc.communicate()
         print(stderr)
 
+    ########################################################## Export to csv
+    info('exp:{} Exporting transmissions locations...'.format(expidx))
+    print(aux)
+    aux = pd.DataFrame(ntransmissions)
+    aux.to_csv(pjoin(outdir, 'ntranmissions.csv'), index=False, header=['ntransmission'])
     ########################################################## Export to csv
     info('exp:{} Exporting S, I, R data'.format(expidx))
     aux = np.array([totalnsusceptibles, totalninfected, totalnrecovered, nparticlesstds]).T
@@ -318,7 +325,7 @@ def step_mobility(g, particles, autoloop_prob):
     return particles
 
 ##########################################################
-def step_transmission(g, status, beta, gamma, particles):
+def step_transmission(g, status, beta, gamma, particles, ntransmissions):
     """Give a step in the transmission dynamic
 
     Args:
@@ -351,9 +358,11 @@ def step_transmission(g, status, beta, gamma, particles):
         if numnewinfected > nsusceptible: numnewinfected = nsusceptible
         if numnewrecovered > ninfected: numnewrecovered = ninfected
 
+        print(numnewinfected)
+        ntransmissions[i] += numnewinfected
         status[indsusceptible[0:numnewinfected]] = INFECTED
         status[indinfected[0:numnewrecovered]] = RECOVERED
-    return status
+    return status, ntransmissions
 
 ##########################################################
 def compute_statuses_sums(status, particles, nvertices, totalnsusceptibles,
