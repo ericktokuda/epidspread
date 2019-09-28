@@ -107,9 +107,9 @@ def run_one_experiment_given_list(l):
 
 ##########################################################
 def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphparam3,
-                    nepochs , s0 , i0 , r0 ,
-                    beta, gamma , graddist , gradstd ,
-                    autoloop_prob , plotzoom , plotlayout , plotrate , outdir ,
+                    nepochs, s0, i0, r0,
+                    beta, gamma, graddist , gradparam1, gradparam2, gradparam3,
+                    autoloop_prob, plotzoom , plotlayout , plotrate , outdir ,
                     nprocs , randomseed, expidx):
     """Main function
 
@@ -124,12 +124,12 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
     cfgdict = {}
     keys = ['graphtopology', 'graphsize', 'graphparam1' , 'graphparam2' , 
             'graphparam3', 's0' , 'i0' , 'r0' ,
-            'beta', 'gamma' , 'graddist' , 'gradstd' ,
+            'beta', 'gamma' , 'graddist' , 'gradparam1', 'gradparam2', 'gradparam3',
             'autoloop_prob' , 'plotzoom' , 'plotlayout' , 'plotrate' , 'outdir' ,
             'nprocs' , 'randomseed']
     args = [graphtopology, graphsize, graphparam1, graphparam2, graphparam3,
-            s0, i0, r0, beta, gamma , graddist , gradstd ,
-            autoloop_prob , plotzoom , plotlayout , plotrate , outdir ,
+            s0, i0, r0, beta, gamma, graddist, gradparam1, gradparam2, gradparam3,
+            autoloop_prob, plotzoom, plotlayout, plotrate, outdir,
             nprocs , randomseed]
     for i, k in enumerate(keys):
         cfgdict[k] = args[i]
@@ -206,6 +206,7 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
     nparticlesstds = [np.std([len(x) for x in particles])]
 
     ########################################################## Distrib. of gradients
+    gradstd = gradparam2
     info('exp:{} Initializing gradients distribution ...'.format(expidx))
     g = initialize_gradients(g, graddist, gradstd)
     info('exp:{} Exporting relief map...'.format(expidx))
