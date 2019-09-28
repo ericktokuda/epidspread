@@ -560,8 +560,12 @@ def main():
     colnames = ['idx'] + (list(cfg.index))
     fh.write(','.join(colnames) + '\n')
 
+    hashes = []
     for i in range(len(aux)):
-        hash = random_string(3)
+        while True:
+            hash = random_string(6)
+            if hash not in hashes: break
+        hashes.append(hash)
         params.append(list(aux[i]) + [hash])
         pstr = [str(x) for x in [hash] + list(aux[i])]
         fh.write(','.join(pstr) + '\n')
