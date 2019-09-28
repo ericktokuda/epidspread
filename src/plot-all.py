@@ -15,7 +15,113 @@ import scipy.stats
 
 import plotly.graph_objects as go
 from ipywidgets import widgets
+import plotly.express as px
 
+def plot_areai(indir):
+    """Plot results from lattice-sir.py
+
+    Args:
+    indir(str): path to the parent directory of the results
+    """
+    df = pd.read_csv(pjoin(indir, 'exps.csv'))
+    areai = []
+
+    for idx in df.idx:
+        aux = pd.read_csv(pjoin(indir, idx, 'sir.csv'))
+        areai.append(np.sum(aux.I))
+
+    df['areai'] = areai
+    gradstds = df['gradstd'].unique()
+    areai = np.ndarray((len(gradstds), 2))
+
+     # = np.ndarray((len(gradstds), 2))
+
+    for i, g in enumerate(gradstds):
+        rows = df.loc[df['gradstd'] == g]
+        mymean = np.mean(rows['areai'])
+        mystd = np.std(rows['areai'])
+        areai[i][0] = mymean
+        areai[i][1] = mystd
+
+    dataareai = go.Scatter(
+        x=gradstds,
+        y=areai[:, 0],
+        line=dict(width=4),
+        name='Area under the curve of I',
+        error_y=dict(
+            type='data', # value of error bar given in data coordinates
+            array=areai[:, 1],
+            visible=True)
+    )
+    plotdata = [dataareai]
+    plotlayout = go.Layout(
+        title='Elapsed time to stationary state',
+        xaxis=dict(
+            title='Uniformity of the gradients (std of the gaussian)'
+        ),
+        yaxis=dict(
+            title='Time (t)'
+        )
+    )
+
+    fig = go.Figure(
+        data=plotdata,
+        layout=plotlayout
+    )
+    fig.show()
+
+def plot_areai(indir):
+    """Plot results from lattice-sir.py
+
+    Args:
+    indir(str): path to the parent directory of the results
+    """
+    df = pd.read_csv(pjoin(indir, 'exps.csv'))
+    areai = []
+
+    for idx in df.idx:
+        aux = pd.read_csv(pjoin(indir, idx, 'sir.csv'))
+        areai.append(np.sum(aux.I))
+
+    df['areai'] = areai
+    gradstds = df['gradstd'].unique()
+    areai = np.ndarray((len(gradstds), 2))
+
+     # = np.ndarray((len(gradstds), 2))
+
+    for i, g in enumerate(gradstds):
+        rows = df.loc[df['gradstd'] == g]
+        mymean = np.mean(rows['areai'])
+        mystd = np.std(rows['areai'])
+        areai[i][0] = mymean
+        areai[i][1] = mystd
+
+    dataareai = go.Scatter(
+        x=gradstds,
+        y=areai[:, 0],
+        line=dict(width=4),
+        name='Recovered rate vs uniformity of the gradients',
+        error_y=dict(
+            type='data', # value of error bar given in data coordinates
+            array=areai[:, 1],
+            visible=True)
+    )
+    plotdata = [dataareai]
+    plotlayout = go.Layout(
+        title='Elapsed time to stationary state',
+        xaxis=dict(
+            title='Uniformity of the gradients (std of the gaussian)'
+        ),
+        yaxis=dict(
+            title='Infection time (area under the curve of I)'
+        )
+    )
+
+    fig = go.Figure(
+        data=plotdata,
+        layout=plotlayout
+    )
+    fig.show()
 def plot_all(indir):
     """Plot results from lattice-sir.py
 
@@ -25,6 +131,7 @@ def plot_all(indir):
     df = pd.read_csv(pjoin(indir, 'exps.csv'))
     modes = []
     argmins = []
+    areai = []
     for idx in df.idx:
         aux = pd.read_csv(pjoin(indir, idx, 'sir.csv'))
 
@@ -33,9 +140,11 @@ def plot_all(indir):
 
         myargmin = np.argmin(aux.S)
         argmins.append(int(myargmin))
+        areai.append(np.sum(aux.I))
 
     df['mode_i'] = modes
     df['argmin_s'] = argmins
+    df['area_i'] = areai
     gradstds = df['gradstd'].unique()
 
     modei = np.ndarray((len(gradstds), 2))
@@ -76,9 +185,9 @@ def plot_all(indir):
     )
     plotdata = [datamode, dataargmin]
     plotlayout = go.Layout(
-        title='Transmission time according to the uniformity',
+        title='Transmission time vs gradients uniformity',
         xaxis=dict(
-            title='Standard deviation of the gaussian of the distribution of gradients'
+            title='Uniformity (std of the gaussian)'
         ),
         yaxis=dict(
             title='Time'
@@ -90,15 +199,52 @@ def plot_all(indir):
     )
     fig.show()
 
+def plot_parallel_coordinates(indir):
+    iris = px.data.iris()
+
+    df = pd.read_csv(pjoin(indir, 'exps.csv'))
+    areai = []
+
+    for idx in df.idx:
+        aux = pd.read_csv(pjoin(indir, idx, 'sir.csv'))
+        areai.append(np.sum(aux.I))
+
+    df['areai'] = areai
+    gradstds = df['gradstd'].unique()
+    areai = np.ndarray((len(gradstds), 2))
+
+     # = np.ndarray((len(gradstds), 2))
+
+    for i, g in enumerate(gradstds):
+        rows = df.loc[df['gradstd'] == g]
+        mymean = np.mean(rows['areai'])
+        mystd = np.std(rows['areai'])
+        areai[i][0] = mymean
+        areai[i][1] = mystd
+
+    print(iris)
+
+    fig = px.parallel_coordinates(areai,
+                                  # color="species_id",
+                                  # labels={"species_id": "Species",
+                                          # "sepal_width": "Sepal Width",
+                                          # "sepal_length": "Sepal Length",
+                                          # "petal_width": "Petal Width",
+                                          # "petal_length": "Petal Length", },
+                                  color_continuous_scale=px.colors.diverging.Tealrose,
+                                  color_continuous_midpoint=2)
+    fig.show()
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('outdir', help='Directory containing the output from lattice-sir')
+    parser.add_argument('resdir', help='Directory containing the output from lattice-sir')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s] %(message)s',
                         datefmt='%Y%m%d %H:%M', level=logging.DEBUG)
-    plot_all(args.outdir)
+    plot_all(args.resdir)
+    # plot_areai(args.resdir)
+    # plot_parallel_coordinates(args.resdir)
 
 if __name__ == "__main__":
     main()
