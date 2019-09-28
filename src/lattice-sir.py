@@ -8,6 +8,8 @@ import os, sys
 from os.path import join as pjoin
 from logging import debug, info
 from itertools import product
+from pathlib import Path
+import socket
 
 import string
 import igraph
@@ -104,7 +106,8 @@ def run_one_experiment_given_list(l):
     run_lattice_sir(*l)
 
 ##########################################################
-def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
+def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphparam3,
+                    nepochs , s0 , i0 , r0 ,
                     beta, gamma , graddist , gradstd ,
                     autoloop_prob , plotzoom , plotlayout , plotrate , outdir ,
                     nprocs , randomseed, expidx):
@@ -119,17 +122,19 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
 
 
     cfgdict = {}
-    keys = ['mapside', 'nei', 'istoroid' , 'nepochs' , 's0' , 'i0' , 'r0' ,
+    keys = ['graphtopology', 'graphsize', 'graphparam1' , 'graphparam2' , 
+            'graphparam3', 's0' , 'i0' , 'r0' ,
             'beta', 'gamma' , 'graddist' , 'gradstd' ,
             'autoloop_prob' , 'plotzoom' , 'plotlayout' , 'plotrate' , 'outdir' ,
             'nprocs' , 'randomseed']
-    args = [mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
-            beta, gamma , graddist , gradstd ,
+    args = [graphtopology, graphsize, graphparam1, graphparam2, graphparam3,
+            s0, i0, r0, beta, gamma , graddist , gradstd ,
             autoloop_prob , plotzoom , plotlayout , plotrate , outdir ,
             nprocs , randomseed]
     for i, k in enumerate(keys):
         cfgdict[k] = args[i]
 
+    # args = [mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
     cfg = pd.DataFrame.from_dict(cfgdict, 'index', columns=['data'])
 
     ########################################################## Cretate outdir
@@ -141,6 +146,10 @@ def run_lattice_sir(mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
     ##########################################################
     info('exp:{} Copying config file ...'.format(expidx))
     cfg['data'].to_json(pjoin(outdir, 'config.json'), force_ascii=False)
+
+    mapside = int(np.sqrt(graphsize))
+    nei = graphparam1
+    istoroid = graphparam2
 
     dim = [mapside, mapside]
     N = s0 + i0 + r0
@@ -528,9 +537,10 @@ def plot_sir(s, i, r, fig, ax, outdir):
 
 def random_string(length=8):
     """Generate a random string of fixed length """
-    letters = np.array(list(string.ascii_lowercase + ' '))
-    aux = ''.join(np.random.choice(letters, size=length))
-    return aux.replace(' ', 'z')
+    letters = np.array(list(string.ascii_lowercase + string.digits))
+    # aux = ''.join(np.random.choice(letters, size=length))
+    # return aux.replace(' ', 'z')
+    return ''.join(np.random.choice(letters, size=length))
 ##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -540,7 +550,7 @@ def main():
     logging.basicConfig(format='[%(asctime)s] %(message)s',
     datefmt='%Y%m%d %H:%M', level=logging.INFO)
 
-    cfg = pd.read_json(args.config, typ='series') # Load config
+    cfg = pd.read_json(args.config, typ='series', precise_float=True) # Load config
 
     outdir = pjoin(cfg.outdir[0], datetime.now().strftime('%Y%m%d_%H%M') + '-latticesir')
     if os.path.exists(outdir):
@@ -557,17 +567,20 @@ def main():
     aux = list(product(*cfg))
     params = []
     fh = open(pjoin(outdir, 'exps.csv'), 'w')
-    colnames = ['idx'] + (list(cfg.index))
+    colnames = ['idx'] + (list(cfg.index)) + ['hostname']
     fh.write(','.join(colnames) + '\n')
 
+    hashsz = 6
     hashes = []
+    fixedchar = random_string(1)
     for i in range(len(aux)):
         while True:
-            hash = random_string(6)
+            hash = fixedchar + random_string(hashsz - 1)
             if hash not in hashes: break
         hashes.append(hash)
         params.append(list(aux[i]) + [hash])
         pstr = [str(x) for x in [hash] + list(aux[i])]
+        pstr += [socket.gethostname()]
         fh.write(','.join(pstr) + '\n')
     fh.close()
 
