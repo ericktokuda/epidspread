@@ -1,7 +1,9 @@
 {
-        "mapside" : [1],
-        "nei" : [1],
-        "istoroid" : [false],
+        "graphtopology" : ["lattice"],
+        "graphsize" : [1],
+        "graphparam1" : [1],
+        "graphparam2" : [false],
+        "graphparam3" : [-1],
         "nepochs" : [10],
         "s0" : [1],
         "i0" : [0],
@@ -9,14 +11,14 @@
         "beta" : [0],
         "gamma" : [0],
         "graddist" : ["uniform"],
-        "gradmean" : [0],
-        "gradstd" : [1],
+        "gradparam1" : [1],
+        "gradparam2" : [1],
+        "gradparam3" : [-1],
         "autoloop_prob" : [0],
         "plotzoom" : [3],
-        "plotlayout" : ["kk"],
+        "plotlayout" : ["grid"],
         "plotrate" : [1],
-        "outdir" : ["/tmp"],
+        "outdir" : ["/tmp/"],
         "nprocs" : [1],
-        "randomseed": [0]
+        "randomseed": [0,1,2]
 }
-
