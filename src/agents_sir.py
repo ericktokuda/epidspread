@@ -105,6 +105,39 @@ def generate_lattice(n, thoroidal=False, s=10):
 def run_one_experiment_given_list(l):
     run_lattice_sir(*l)
 
+
+def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
+                   graphparam3, plotlayout):
+    """Generate graph with given topology
+
+    Args:
+    graphsize(int): number of vertices
+    graphtopology(str): topology, consult igraph layout options
+    graphparam1, graphparam2, graphparam3: topology options
+
+    Returns:
+    igraph.Graph, igraph.Layout: graph and the layout
+    """
+
+
+    # g, visual = generate_graph(graphsize, graphtopology, graphsize,
+                               # graphparam1, graphparam2, graphparam3)
+                               
+
+    if graphtopology == 'lattice':
+        # 1: neigh, 2: thoroidal, 3-: not used
+        mapside = int(np.sqrt(graphsize))
+        pos, adj = generate_lattice(mapside, graphparam2)
+        g = igraph.Graph.Adjacency(adj.tolist(), mode=igraph.ADJ_UNDIRECTED)
+        g.vs['x'] = pos[:, 0]
+        g.vs['y'] = pos[:, 1]
+    elif graphtopology == 'erdos':
+        g = igraph.Graph.Adjacency(adj.tolist(), mode=igraph.ADJ_UNDIRECTED)
+        g.vs['x'] = pos[:, 0]
+        g.vs['y'] = pos[:, 1]
+
+    layout = g.layout(plotlayout)
+    return g, layout
 ##########################################################
 def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphparam3,
                     nepochs, s0, i0, r0,
@@ -177,14 +210,12 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
                                                                              mapside,
                                                                              ))
 
-    pos, adj = generate_lattice(mapside, graphparam2)
-    g = igraph.Graph.Adjacency(adj.tolist(), mode=igraph.ADJ_UNDIRECTED)
-    g.vs['x'] = pos[:, 0]
-    g.vs['y'] = pos[:, 1]
+    g, layout = generate_graph(graphtopology, graphsize, graphparam1,
+                               graphparam2, graphparam3, plotlayout)
+
     # g = igraph.Graph.Lattice(dim, nei, directed=False, mutual=True, circular=istoroid)
 
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
-    layout = g.layout(plotlayout)
 
     ntransmissions = np.zeros(nvertices, dtype=int)
     ########################################################## Distrib. of particles
@@ -210,10 +241,12 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
     info('exp:{} Initializing gradients distribution ...'.format(expidx))
     g = initialize_gradients(g, graddist, gradstd)
     info('exp:{} Exporting relief map...'.format(expidx))
-    # aux = pd.DataFrame(g.vs['gradient'])
+
     aux = pd.DataFrame()
-    aux['x'] = g.vs['x']
-    aux['y'] = g.vs['y']
+    coords = np.array(layout.coords)
+
+    aux['x'] = coords[:, 0]
+    aux['y'] = coords[:, 1]
     aux['gradient'] = g.vs['gradient']
     aux.to_csv(pjoin(outdir, 'attraction.csv'), index=False, header=['x', 'y', 'gradient'])
 
