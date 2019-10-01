@@ -105,9 +105,9 @@ def generate_lattice(n, thoroidal=False, s=10):
 def run_one_experiment_given_list(l):
     run_lattice_sir(*l)
 
-
+#############################################################
 def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
-                   graphparam3, plotlayout):
+                   graphparam3, graphlayout, layoutparam1, layoutparam2, layoutparam3):
     """Generate graph with given topology
 
     Args:
@@ -125,25 +125,28 @@ def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
                                
 
     if graphtopology == 'lattice':
-        # 1: neigh, 2: thoroidal, 3-: not used
+        # 1: neigh, 2: thoroidal
         mapside = int(np.sqrt(graphsize))
-        pos, adj = generate_lattice(mapside, graphparam2)
-        g = igraph.Graph.Adjacency(adj.tolist(), mode=igraph.ADJ_UNDIRECTED)
-        g.vs['x'] = pos[:, 0]
-        g.vs['y'] = pos[:, 1]
+        g = igraph.Graph.Lattice([mapside, mapside], nei=1, circular=graphparam2)
     elif graphtopology == 'erdos':
-        g = igraph.Graph.Adjacency(adj.tolist(), mode=igraph.ADJ_UNDIRECTED)
-        g.vs['x'] = pos[:, 0]
-        g.vs['y'] = pos[:, 1]
+        # 1: probability
+        g = igraph.Graph.Erdos_Renyi(graphsize, graphparam1)
+    elif graphtopology == 'watts':
+        # 1: dimension, 2: size of the lattice, 3: rewiring prob
+        # graphsize =  x^k
+        # g = igraph.graph.(x, k, graphparam2, graphparam3)
+        # Watts_Strogatz(dim, size, nei, p
+        pass
 
-    layout = g.layout(plotlayout)
+    layout = g.layout(graphlayout)
     return g, layout
 ##########################################################
 def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphparam3,
+                    graphlayout, layoutparam1, layoutparam2, layoutparam3,
                     nepochs, s0, i0, r0,
                     beta, gamma, graddist , gradparam1, gradparam2, gradparam3,
-                    autoloop_prob, plotzoom , plotlayout , plotrate , outdir ,
-                    nprocs , randomseed, expidx):
+                    autoloop_prob, plotzoom, plotrate, outdir,
+                    nprocs, randomseed, expidx):
     """Main function
 
     Args:
@@ -155,14 +158,17 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
 
 
     cfgdict = {}
-    keys = ['graphtopology', 'graphsize', 'graphparam1' , 'graphparam2' , 
-            'graphparam3', 's0' , 'i0' , 'r0' ,
+    keys = ['graphtopology', 'graphsize', 'graphparam1' , 'graphparam2' , 'graphparam3',
+            'graphlayout', 'layoutparam1', 'layoutparam2', 'layoutparam3',
+            'nepochs', 's0' , 'i0' , 'r0' ,
             'beta', 'gamma' , 'graddist' , 'gradparam1', 'gradparam2', 'gradparam3',
-            'autoloop_prob' , 'plotzoom' , 'plotlayout' , 'plotrate' , 'outdir' ,
+            'autoloop_prob' , 'plotzoom' , 'plotrate' , 'outdir' ,
             'nprocs' , 'randomseed']
     args = [graphtopology, graphsize, graphparam1, graphparam2, graphparam3,
-            s0, i0, r0, beta, gamma, graddist, gradparam1, gradparam2, gradparam3,
-            autoloop_prob, plotzoom, plotlayout, plotrate, outdir,
+            graphlayout, layoutparam1, layoutparam2, layoutparam3,
+            nepochs, s0, i0, r0,
+            beta, gamma, graddist, gradparam1, gradparam2, gradparam3,
+            autoloop_prob, plotzoom, plotrate, outdir,
             nprocs , randomseed]
     for i, k in enumerate(keys):
         cfgdict[k] = args[i]
@@ -210,8 +216,11 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
                                                                              mapside,
                                                                              ))
 
-    g, layout = generate_graph(graphtopology, graphsize, graphparam1,
-                               graphparam2, graphparam3, plotlayout)
+# def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
+                   # graphparam3, graphlayout, layoutparam1, layoutparam2, layoutparam3):
+    g, graphlayout = generate_graph(graphtopology, graphsize, graphparam1,
+                               graphparam2, graphparam3, graphlayout,
+                               layoutparam1, layoutparam2, layoutparam3)
 
     # g = igraph.Graph.Lattice(dim, nei, directed=False, mutual=True, circular=istoroid)
 
@@ -239,11 +248,11 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
     ########################################################## Distrib. of gradients
     gradstd = gradparam2
     info('exp:{} Initializing gradients distribution ...'.format(expidx))
-    g = initialize_gradients(g, graddist, gradstd)
+    g = initialize_gradients(g, graphlayout, graddist, gradstd)
     info('exp:{} Exporting relief map...'.format(expidx))
 
     aux = pd.DataFrame()
-    coords = np.array(layout.coords)
+    coords = np.array(graphlayout.coords)
 
     aux['x'] = coords[:, 0]
     aux['y'] = coords[:, 1]
@@ -260,7 +269,7 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
         gradsum = float(np.sum(g.vs['gradient']))
         gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
         outgradientspath = pjoin(outdir, 'gradients.png')
-        igraph.plot(g, target=outgradientspath, layout=layout,
+        igraph.plot(g, target=outgradientspath, layout=graphlayout,
                     vertex_shape='rectangle', vertex_color=gradientscolors,
                     vertex_frame_width=0.0, **visual)      
 
@@ -268,7 +277,7 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
         ########################################################## Plot epoch 0
         nsusceptibles, ninfected, nrecovered, \
             _, _, _  = compute_statuses_sums(status, particles, nvertices, [], [], [])
-        plot_epoch_graphs(-1, g, layout, visual, status, nvertices, particles,
+        plot_epoch_graphs(-1, g, graphlayout, visual, status, nvertices, particles,
                           N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
                           totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
@@ -291,7 +300,7 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
         if nepochs == -1 and np.sum(status==INFECTED) == 0: break
 
         if plotrate > 0 and ep % plotrate == 0:
-            plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
+            plot_epoch_graphs(ep, g, graphlayout, visual, status, nvertices, particles,
                               N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
                               totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
@@ -395,7 +404,7 @@ k
     return g
 
 ##########################################################
-def initialize_gradients_gaussian(g, mu, cov):
+def initialize_gradients_gaussian(g, graphlayout, mu, cov):
     """Initizalition of gradients with a single gaussian
 
     Args:
@@ -406,13 +415,13 @@ k
     """
 
     for i, v in enumerate(g.vs):
-        g.vs[i]['gradient'] = multivariate_normal(np.array([v['x'], v['y']]),
-                                                  2, mu, cov)
+        p = np.array(graphlayout.coords)[i, :]
+        g.vs[i]['gradient'] = multivariate_normal(p, 2, mu, cov)
 
     return g
 
 ##########################################################
-def initialize_gradients(g, method='peak', sigma=1):
+def initialize_gradients(g, graphlayout, method='peak', sigma=1):
     """Initialize gradients with some distribution
 
     Args:
@@ -429,10 +438,10 @@ def initialize_gradients(g, method='peak', sigma=1):
     if method == 'peak':
         return initialize_gradients_peak(g)
     elif method == 'gaussian':
-        aux = np.max(g.vs['x'])
+        aux = np.max(np.array(graphlayout.coords)[:, 0])
         mu = np.array(aux/2, aux/2)
         cov = np.eye(2) * sigma
-        return initialize_gradients_gaussian(g, mu, cov)
+        return initialize_gradients_gaussian(g, graphlayout, mu, cov)
 
 def step_mobility(g, particles, autoloop_prob):
     """Give a step in the mobility dynamic
@@ -596,7 +605,6 @@ def main():
         os.mkdir(outdir)
 
     cfg.outdir = [outdir]
-
     
     aux = list(product(*cfg))
     params = []
