@@ -4,6 +4,10 @@
         "graphparam1" : [1],
         "graphparam2" : [true],
         "graphparam3" : [-1],
+        "graphlayout" : ["grid"],
+        "layoutparam1" : [-1],
+        "layoutparam2" : [-1],
+        "layoutparam3" : [-1],
         "nepochs" : [50],
         "s0" : [100],
         "i0" : [20],
@@ -16,9 +20,8 @@
         "gradparam3" : [-1],
         "autoloop_prob" : [0,0.5],
         "plotzoom" : [2],
-        "plotlayout" : ["grid"],
         "plotrate" : [1],
         "outdir" : ["/tmp/"],
-        "nprocs" : [2],
+        "nprocs" : [1],
         "randomseed": [0,1,2]
 }
