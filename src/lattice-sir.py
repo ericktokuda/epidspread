@@ -177,7 +177,7 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
                                                                              mapside,
                                                                              ))
 
-    pos, adj = generate_lattice(mapside, True)
+    pos, adj = generate_lattice(mapside, graphparam2)
     g = igraph.Graph.Adjacency(adj.tolist(), mode=igraph.ADJ_UNDIRECTED)
     g.vs['x'] = pos[:, 0]
     g.vs['y'] = pos[:, 1]
