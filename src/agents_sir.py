@@ -137,7 +137,16 @@ def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
     if graphlayout == 'grid':
         layout = g.layout(graphlayout)
     elif graphlayout == 'fr' or graphlayout == 'fruchterman_reingold':
-        layout = g.layout(graphlayout, layoutparam1, layoutparam2, area=plotarea)
+        # 1: maxiter, 2: maxdelta
+        if layoutparam2 == -1: layoutparam2 = graphsize # according to igraph doc
+        layout = g.layout(graphlayout, maxiter=layoutparam1, maxdelta=layoutparam2)
+
+    elif graphlayout == 'kk' or graphlayout == 'kamada_kawai':
+        # 1: maxiter, 2: std of the position change, 3: kk attraction const
+        if layoutparam2 == -1: layoutparam2 = graphsize/4 # according to igraph doc
+        if layoutparam3 == -1: layoutparam3 = graphsize**2 # according to igraph doc
+        layout = g.layout(graphlayout, maxiter=layoutparam1,
+                          sigma=layoutparam2, kkconst=layoutparam3)
 
     aux = np.array(layout.coords)
     coords = (aux - np.mean(aux, 0))/np.std(aux, 0)
