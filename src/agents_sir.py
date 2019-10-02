@@ -116,13 +116,8 @@ def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
     graphparam1, graphparam2, graphparam3: topology options
 
     Returns:
-    igraph.Graph, igraph.Layout: graph and the layout
+    igraph.Graph, np.ndarray: graph and the layout
     """
-
-
-    # g, visual = generate_graph(graphsize, graphtopology, graphsize,
-                               # graphparam1, graphparam2, graphparam3)
-                               
 
     if graphtopology == 'lattice':
         # 1: neigh, 2: thoroidal
@@ -138,8 +133,14 @@ def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
         # Watts_Strogatz(dim, size, nei, p
         pass
 
-    layout = g.layout(graphlayout)
-    return g, layout
+    if graphlayout == 'grid':
+        layout = g.layout(graphlayout)
+    elif graphlayout == 'fr' or graphlayout == 'fruchterman_reingold':
+        layout = g.layout(graphlayout, layoutparam1, layoutparam2)
+
+    aux = np.array(layout.coords)
+    coords = (aux - np.mean(aux, 0))/np.std(aux, 0)
+    return g, coords
 ##########################################################
 def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphparam3,
                     graphlayout, layoutparam1, layoutparam2, layoutparam3,
@@ -216,13 +217,10 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
                                                                              mapside,
                                                                              ))
 
-# def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
-                   # graphparam3, graphlayout, layoutparam1, layoutparam2, layoutparam3):
-    g, graphlayout = generate_graph(graphtopology, graphsize, graphparam1,
+    g, coords = generate_graph(graphtopology, graphsize, graphparam1,
                                graphparam2, graphparam3, graphlayout,
                                layoutparam1, layoutparam2, layoutparam3)
 
-    # g = igraph.Graph.Lattice(dim, nei, directed=False, mutual=True, circular=istoroid)
 
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
 
@@ -248,11 +246,10 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
     ########################################################## Distrib. of gradients
     gradstd = gradparam2
     info('exp:{} Initializing gradients distribution ...'.format(expidx))
-    g = initialize_gradients(g, graphlayout, graddist, gradstd)
+    g = initialize_gradients(g, coords, graddist, gradstd)
     info('exp:{} Exporting relief map...'.format(expidx))
 
     aux = pd.DataFrame()
-    coords = np.array(graphlayout.coords)
 
     aux['x'] = coords[:, 0]
     aux['y'] = coords[:, 1]
@@ -269,7 +266,7 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
         gradsum = float(np.sum(g.vs['gradient']))
         gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
         outgradientspath = pjoin(outdir, 'gradients.png')
-        igraph.plot(g, target=outgradientspath, layout=graphlayout,
+        igraph.plot(g, target=outgradientspath, layout=coords.tolist(),
                     vertex_shape='rectangle', vertex_color=gradientscolors,
                     vertex_frame_width=0.0, **visual)      
 
@@ -277,7 +274,7 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
         ########################################################## Plot epoch 0
         nsusceptibles, ninfected, nrecovered, \
             _, _, _  = compute_statuses_sums(status, particles, nvertices, [], [], [])
-        plot_epoch_graphs(-1, g, graphlayout, visual, status, nvertices, particles,
+        plot_epoch_graphs(-1, g, coords, visual, status, nvertices, particles,
                           N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
                           totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
@@ -300,7 +297,7 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
         if nepochs == -1 and np.sum(status==INFECTED) == 0: break
 
         if plotrate > 0 and ep % plotrate == 0:
-            plot_epoch_graphs(ep, g, graphlayout, visual, status, nvertices, particles,
+            plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
                               N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
                               totalnsusceptibles, totalninfected, totalnrecovered, outdir)
 
@@ -355,7 +352,8 @@ def initialize_gradients_peak(g):
     Returns:
     igraph.Graph: graph instance with attribute 'gradient' updated
     """
-    g.vs[0]['gradient'] = 100
+    g.vs['gradient'] = 0.1
+    g.vs[0]['gradient'] = 1
     return g
 
 ##########################################################
@@ -404,7 +402,7 @@ k
     return g
 
 ##########################################################
-def initialize_gradients_gaussian(g, graphlayout, mu, cov):
+def initialize_gradients_gaussian(g, coords, mu, cov):
     """Initizalition of gradients with a single gaussian
 
     Args:
@@ -415,13 +413,12 @@ k
     """
 
     for i, v in enumerate(g.vs):
-        p = np.array(graphlayout.coords)[i, :]
-        g.vs[i]['gradient'] = multivariate_normal(p, 2, mu, cov)
+        g.vs[i]['gradient'] = multivariate_normal(coords[i, :], 2, mu, cov)
 
     return g
 
 ##########################################################
-def initialize_gradients(g, graphlayout, method='peak', sigma=1):
+def initialize_gradients(g, coords, method='peak', sigma=1):
     """Initialize gradients with some distribution
 
     Args:
@@ -431,17 +428,16 @@ def initialize_gradients(g, graphlayout, method='peak', sigma=1):
     igraph.Graph: graph instance with attribute 'gradient' updated
     """
 
-    g.vs['gradient'] = 10
 
     if method == 'uniform':
+        g.vs['gradient'] = 0.1
         return g
     if method == 'peak':
         return initialize_gradients_peak(g)
     elif method == 'gaussian':
-        aux = np.max(np.array(graphlayout.coords)[:, 0])
-        mu = np.array(aux/2, aux/2)
+        mu = (np.max(coords, 0) + np.min(coords, 0)) / 2
         cov = np.eye(2) * sigma
-        return initialize_gradients_gaussian(g, graphlayout, mu, cov)
+        return initialize_gradients_gaussian(g, coords, mu, cov)
 
 def step_mobility(g, particles, autoloop_prob):
     """Give a step in the mobility dynamic
@@ -536,7 +532,7 @@ def compute_statuses_sums(status, particles, nvertices, totalnsusceptibles,
     totalnrecovered.append(np.sum(nrecovered))
     return nsusceptibles, ninfected, nrecovered, totalnsusceptibles, totalninfected, totalnrecovered
 ##########################################################
-def plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
+def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
                       N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
                       totalnsusceptibles, totalninfected, totalnrecovered, outdir):
     susceptiblecolor = []
@@ -557,9 +553,9 @@ def plot_epoch_graphs(ep, g, layout, visual, status, nvertices, particles,
     outinfectedpath = pjoin(outdir, 'infected{:02d}.png'.format(ep+1))
     outrecoveredpath = pjoin(outdir, 'recovered{:02d}.png'.format(ep+1))
 
-    igraph.plot(g, target=outsusceptiblepath, layout=layout, vertex_shape='rectangle', vertex_color=susceptiblecolor, vertex_frame_width=0.0, **visual)      
-    igraph.plot(g, target=outinfectedpath, layout=layout, vertex_shape='rectangle', vertex_color=infectedcolor, vertex_frame_width=0.0, **visual)      
-    igraph.plot(g, target=outrecoveredpath, layout=layout, vertex_shape='rectangle', vertex_color=recoveredcolor, vertex_frame_width=0.0, **visual)      
+    igraph.plot(g, target=outsusceptiblepath, layout=coords.tolist(), vertex_shape='rectangle', vertex_color=susceptiblecolor, vertex_frame_width=0.0, **visual)
+    igraph.plot(g, target=outinfectedpath, layout=coords.tolist(), vertex_shape='rectangle', vertex_color=infectedcolor, vertex_frame_width=0.0, **visual)
+    igraph.plot(g, target=outrecoveredpath, layout=coords.tolist(), vertex_shape='rectangle', vertex_color=recoveredcolor, vertex_frame_width=0.0, **visual)
 
     outconcatpath = pjoin(outdir, 'concat{:02d}.png'.format(ep+1))
     proc = Popen('convert {} {} {} {} +append {}'.format(outgradientspath,
