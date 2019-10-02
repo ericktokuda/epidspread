@@ -107,7 +107,8 @@ def run_one_experiment_given_list(l):
 
 #############################################################
 def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
-                   graphparam3, graphlayout, layoutparam1, layoutparam2, layoutparam3):
+                   graphparam3, graphlayout, layoutparam1, layoutparam2, layoutparam3,
+                   plotarea):
     """Generate graph with given topology
 
     Args:
@@ -136,7 +137,7 @@ def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
     if graphlayout == 'grid':
         layout = g.layout(graphlayout)
     elif graphlayout == 'fr' or graphlayout == 'fruchterman_reingold':
-        layout = g.layout(graphlayout, layoutparam1, layoutparam2)
+        layout = g.layout(graphlayout, layoutparam1, layoutparam2, area=plotarea)
 
     aux = np.array(layout.coords)
     coords = (aux - np.mean(aux, 0))/np.std(aux, 0)
@@ -216,10 +217,13 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
                                                                              mapside,
                                                                              mapside,
                                                                              ))
-
+    plotarea = 36   # Square of the center surrounded by radius 3
+                    # (equiv to 99.7% of the points of a gaussian)
     g, coords = generate_graph(graphtopology, graphsize, graphparam1,
                                graphparam2, graphparam3, graphlayout,
-                               layoutparam1, layoutparam2, layoutparam3)
+                               layoutparam1, layoutparam2, layoutparam3, plotarea)
+    print(np.min(coords, 0), np.max(coords, 0))
+    input()
 
 
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
