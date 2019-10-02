@@ -222,9 +222,6 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
     g, coords = generate_graph(graphtopology, graphsize, graphparam1,
                                graphparam2, graphparam3, graphlayout,
                                layoutparam1, layoutparam2, layoutparam3, plotarea)
-    print(np.min(coords, 0), np.max(coords, 0))
-    input()
-
 
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
 
