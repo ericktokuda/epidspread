@@ -592,7 +592,9 @@ def main():
 
     cfg = pd.read_json(args.config, typ='series', precise_float=True) # Load config
 
-    outdir = pjoin(cfg.outdir[0], datetime.now().strftime('%Y%m%d_%H%M') + '-latticesir')
+    outdir = pjoin(cfg.outdir[0], datetime.now().strftime('%Y%m%d_%H%M') + '-agentssir')
+
+    info('Files will be generated in {}/...'.format(outdir))
     if os.path.exists(outdir):
         ans = input(outdir + ' exists. Do you want to continue? ')
         if ans.lower() not in ['y', 'yes']:
