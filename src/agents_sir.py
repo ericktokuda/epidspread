@@ -532,11 +532,14 @@ def step_transmission(g, status, beta, gamma, particles, ntransmissions):
 
 ##########################################################
 def compute_statuses_sums(status, particles, nvertices, totalnsusceptibles,
-                          totalninfected, totalnrecovered):
+                          totalninfected, totalnrecovered, nclasses=3):
     """Compute the sum of each status
 
     Args:
-    params
+    status(np.ndarray): size nparticlesx1, with an int corresponding to the status
+    particles(list of list): list of ids of the neighbour particles
+    nvertices(int): number of vertices of the map
+    totalnsusceptibles(int): number of vertices of the map
 
     Returns:
     nsusceptibles(list of int): number of susceptibles per vertex
@@ -544,13 +547,17 @@ def compute_statuses_sums(status, particles, nvertices, totalnsusceptibles,
     nrecovered(list of int): number of recovered per vertex
     """
 
-    nsusceptibles = np.array([ np.sum(status[particles[i]]==SUSCEPTIBLE) for i in range(nvertices)] )
-    ninfected = np.array([ np.sum(status[particles[i]]==INFECTED) for i in range(nvertices)] )
-    nrecovered = np.array([ np.sum(status[particles[i]]==RECOVERED) for i in range(nvertices)] )
-    totalnsusceptibles.append(np.sum(nsusceptibles))
-    totalninfected.append(np.sum(ninfected))
-    totalnrecovered.append(np.sum(nrecovered))
-    return nsusceptibles, ninfected, nrecovered, totalnsusceptibles, totalninfected, totalnrecovered
+
+    dist = np.zeros((nvertices, 3))
+    for i in range(nvertices):
+        x = np.bincount(status[particles[i]], minlength=nclasses)
+        dist[i, :] = x
+
+    sums = np.sum(dist, 0)
+    totalnsusceptibles.append(sums[0])
+    totalninfected.append(sums[1])
+    totalnrecovered.append(sums[2])
+    return dist[:, 0], dist[:, 1], dist[:, 2], totalnsusceptibles, totalninfected, totalnrecovered
 ##########################################################
 def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
                       N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
