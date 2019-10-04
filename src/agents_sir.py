@@ -10,10 +10,10 @@ from logging import debug, info
 from itertools import product
 from pathlib import Path
 import socket
+import time
 
 import string
 import igraph
-import networkx as nx
 import numpy as np
 import pandas as pd
 import copy
@@ -34,7 +34,6 @@ RECOVERED = 2
 EPSILON = 1E-5
 MAX = sys.maxsize
 MAXITERS = 100000
-
 
 #############################################################
 def get_4connected_neighbours_2d(i, j, n, thoroidal=False):
@@ -175,6 +174,7 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
     ret
     """
 
+    t0 = time.time()
 
     cfgdict = {}
     keys = ['graphtopology', 'graphsize', 'graphparam1' , 'graphparam2' , 'graphparam3',
@@ -199,8 +199,10 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
     # expidxstr = '{:03d}'.format(expidx)
     outdir = pjoin(outdir, expidx)
 
-    if not os.path.exists(outdir):
-        os.mkdir(outdir)
+    summarypath = pjoin(outdir, 'sir.csv')
+    elapsedpath = pjoin(outdir, 'elapsed.csv')
+    if os.path.exists(summarypath): return
+    os.makedirs(outdir, exist_ok=True)
     ##########################################################
     info('exp:{} Copying config file ...'.format(expidx))
     cfg['data'].to_json(pjoin(outdir, 'config.json'), force_ascii=False)
@@ -341,16 +343,20 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
         'R': statuscountsum[:, 2],
         'nparticlesstd': nparticlesstds
     })
-    outdf.to_csv(pjoin(outdir, 'sir.csv'),
-                             index=True, index_label='t')
+    outdf.to_csv(summarypath, index=True, index_label='t')
 
     ########################################################## Plot SIR over time
     info('exp:{} Generating plots for counts of S, I, R'.format(expidx))
     fig, ax = plt.subplots(1, 1)
     plot_sir(statuscountsum[:, 0], statuscountsum[:, 1], statuscountsum[:, 2],
              fig, ax, outdir)
+
+    elapsed = time.time() - t0
+    info('exp:{} Elapsed time: {:.2f}h'.format(expidx, elapsed/3600))
+    with open(elapsedpath, 'w') as fh: fh.write(str(elapsed))
     info('exp:{} Finished. Results are in {}'.format(expidx, outdir))
 
+########################################################## Plot SIR over time
 def visualize_static_graph_layouts(g, layoutspath, outdir):
     layouts = [line.rstrip('\n') for line in open(layoutspath)]
     for l in layouts:
@@ -604,13 +610,13 @@ def plot_sir(s, i, r, fig, ax, outdir):
 def random_string(length=8):
     """Generate a random string of fixed length """
     letters = np.array(list(string.ascii_lowercase + string.digits))
-    # aux = ''.join(np.random.choice(letters, size=length))
-    # return aux.replace(' ', 'z')
     return ''.join(np.random.choice(letters, size=length))
+
 ##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('config', nargs='?', default='config/toy01.json')
+    parser.add_argument('config', help='Config file')
+    parser.add_argument('--overwrite', action='store_true', help='Overwrite')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s] %(message)s',
@@ -618,38 +624,47 @@ def main():
 
     cfg = pd.read_json(args.config, typ='series', precise_float=True) # Load config
 
-    outdir = pjoin(cfg.outdir[0], datetime.now().strftime('%Y%m%d_%H%M') + '-agentssir')
+    # outdir = pjoin(cfg.outdir[0], datetime.now().strftime('%Y%m%d_%H%M') + '-agentssir')
+    outdir = cfg.outdir[0]
 
     info('Files will be generated in {}/...'.format(outdir))
-    if os.path.exists(outdir):
-        ans = input(outdir + ' exists. Do you want to continue? ')
-        if ans.lower() not in ['y', 'yes']:
-            info('Aborting')
-            return
-    else:
-        os.mkdir(outdir)
+    existing = os.path.exists(outdir)
 
+    if existing and not args.overwrite:
+        print('Folder {} exists. Change the outdir parameter or use --overwrite'. \
+              format(outdir))
+        return
+
+    os.makedirs(outdir, exist_ok=True)
     cfg.outdir = [outdir]
-    
-    aux = list(product(*cfg))
-    params = []
-    fh = open(pjoin(outdir, 'exps.csv'), 'w')
-    colnames = ['idx'] + (list(cfg.index)) + ['hostname']
-    fh.write(','.join(colnames) + '\n')
 
-    hashsz = 6
-    hashes = []
-    fixedchar = random_string(1)
-    for i in range(len(aux)):
-        while True:
-            hash = fixedchar + random_string(hashsz - 1)
-            if hash not in hashes: break
-        hashes.append(hash)
-        params.append(list(aux[i]) + [hash])
-        pstr = [str(x) for x in [hash] + list(aux[i])]
-        pstr += [socket.gethostname()]
-        fh.write(','.join(pstr) + '\n')
-    fh.close()
+    expspath = pjoin(outdir, 'exps.csv')
+
+    if existing and os.path.exists(expspath): # Load config from exps
+        df = pd.read_csv(expspath)
+        aux = df.to_numpy()
+        aux[:, -1] = aux[:, 0]
+        params = aux[:, 1:]
+    else:
+        aux = list(product(*cfg))
+        params = []
+        fh = open(expspath, 'w')
+        colnames = ['idx'] + (list(cfg.index)) + ['hostname']
+        fh.write(','.join(colnames) + '\n')
+
+        hashsz = 6
+        hashes = []
+        fixedchar = random_string(1)
+        for i in range(len(aux)):
+            while True:
+                hash = fixedchar + random_string(hashsz - 1)
+                if hash not in hashes: break
+            hashes.append(hash)
+            params.append(list(aux[i]) + [hash])
+            pstr = [str(x) for x in [hash] + list(aux[i])]
+            pstr += [socket.gethostname()]
+            fh.write(','.join(pstr) + '\n')
+        fh.close()
 
     if cfg.nprocs[0] <= 1:
         [ run_one_experiment_given_list(p) for p in params ]
