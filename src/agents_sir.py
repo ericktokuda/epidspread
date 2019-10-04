@@ -70,6 +70,13 @@ def get_4connected_neighbours_2d(i, j, n, thoroidal=False):
 
     return np.array(inds)
 
+def fast_random_choice(lst, probs):
+    return lst[np.searchsorted(probs.cumsum(), np.random.rand())]
+
+def random_choice_prob_index(a, axis=1):
+    r = np.expand_dims(np.random.rand(a.shape[1-axis]), axis=axis)
+    return (a.cumsum(axis=axis) > r).argmax(axis=axis)
+
 #############################################################
 def generate_lattice(n, thoroidal=False, s=10):
     """Generate 2d lattice of side n
@@ -476,7 +483,10 @@ def step_mobility(g, particles, autoloop_prob):
         for j, partic in enumerate(particles_fixed[i]): # For each particle in this vertex
             if np.random.rand() <= autoloop_prob: continue
             if neighids == []: continue
-            neighid = np.random.choice(neighids, p=gradients)
+
+            # neighid = np.random.choice(neighids, p=gradients) # slow
+            neighid = fast_random_choice(neighids, gradients)
+
             particles[i].remove(partic)
             particles[neighid].append(partic)
     return particles
