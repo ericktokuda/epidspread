@@ -33,6 +33,7 @@ INFECTED = 1
 RECOVERED = 2
 EPSILON = 1E-5
 MAX = sys.maxsize
+MAXITERS = 100000
 
 
 #############################################################
@@ -223,9 +224,8 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
     visual["margin"] = mapside*plotzoom
     visual["vertex_size"] = 10*plotzoom
 
-    totalnsusceptibles = [s0]
-    totalninfected = [i0]
-    totalnrecovered = [r0]
+    statuscountsum = np.zeros((MAXITERS, 3), dtype=int)
+    statuscountsum[0, :] = np.array([s0, i0, r0])
 
     aux = '' if istoroid else 'non-'
     info('exp:{} Generating {}toroidal lattice with dim ({}, {}) ...'.format(expidx,
@@ -258,7 +258,8 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
     for i in range(nvertices):
         particles[i] = list(range(aux, aux+nparticles[i]))
         aux += nparticles[i]
-    nparticlesstds = [np.std([len(x) for x in particles])]
+    # nparticlesstds = [np.std([len(x) for x in particles])]
+    nparticlesstds = np.zeros((MAXITERS,), dtype=float)
 
     ########################################################## Distrib. of gradients
     gradstd = gradparam2
@@ -289,63 +290,65 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
 
         b = 0.1 # For colors definition
         ########################################################## Plot epoch 0
-        nsusceptibles, ninfected, nrecovered, \
-            _, _, _  = compute_statuses_sums(status, particles, nvertices, [], [], [])
+        statuscount, _  = compute_statuses_sums(status, particles, nvertices, )
+
         plot_epoch_graphs(-1, g, coords, visual, status, nvertices, particles,
-                          N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
-                          totalnsusceptibles, totalninfected, totalnrecovered, outdir)
+                          N, b, outgradientspath,
+                          statuscount[:, 0], statuscount[:, 1], statuscount[:, 2],
+                          outdir)
 
     maxepoch = nepochs if nepochs > 0 else MAX
+
     for ep in range(maxepoch):
+        lastepoch = ep
         if ep % 10 == 0:
             info('exp:{}, t:{}'.format(expidx, ep))
         particles = step_mobility(g, particles, autoloop_prob)
-        aux = np.std([len(x) for x in particles])
-        nparticlesstds.append(aux)
-        status, ntransmissions = step_transmission(g, status, beta, gamma, particles,
-                                                      ntransmissions)
+        nparticlesstds[ep] = np.std([len(x) for x in particles])
+        status, newtransmissions = step_transmission(g, status, beta, gamma, particles)
+        ntransmissions += newtransmissions
       
-        nsusceptibles, ninfected, nrecovered, \
-            totalnsusceptibles, totalninfected, \
-            totalnrecovered  = compute_statuses_sums(status, particles, nvertices,
-                                                     totalnsusceptibles, totalninfected,
-                                                     totalnrecovered)
+        dist, distsum  = compute_statuses_sums(status, particles, nvertices)
+        statuscountsum[ep, :] = distsum
 
         if nepochs == -1 and np.sum(status==INFECTED) == 0: break
 
         if plotrate > 0 and ep % plotrate == 0:
             plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
-                              N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
-                              totalnsusceptibles, totalninfected, totalnrecovered, outdir)
+                              N, b, outgradientspath,
+                              statuscount[:, 0], statuscount[:, 1], statuscount[:, 2],
+                              outdir)
 
     ########################################################## Enhance plots
     if plotrate > 0:
-        # cmd = "mogrify -gravity south -pointsize 24 " "-annotate +50+0 'GRADIENT' " \
-            # "-annotate +350+0 'S' -annotate +650+0 'I' -annotate +950+0 'R' " \
-            # "{}/concat*.png".format(outdir)
-        # proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
-        # stdout, stderr = proc.communicate()
-
         animationpath = pjoin(outdir, 'animation.gif')
         cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
         proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
         stdout, stderr = proc.communicate()
         print(stderr)
 
+    statuscountsum = statuscountsum[:lastepoch+1, :]
+    nparticlesstds = nparticlesstds[:lastepoch+1]
     ########################################################## Export to csv
     info('exp:{} Exporting transmissions locations...'.format(expidx))
     aux = pd.DataFrame(ntransmissions)
     aux.to_csv(pjoin(outdir, 'ntranmissions.csv'), index=False, header=['ntransmission'])
     ########################################################## Export to csv
     info('exp:{} Exporting S, I, R data'.format(expidx))
-    aux = np.array([totalnsusceptibles, totalninfected, totalnrecovered, nparticlesstds]).T
-    pd.DataFrame(aux).to_csv(pjoin(outdir, 'sir.csv'), header=['S', 'I', 'R', 'nparticlesstd'],
+    outdf = pd.DataFrame({
+        'S': statuscountsum[:, 0],
+        'I': statuscountsum[:, 1],
+        'R': statuscountsum[:, 2],
+        'nparticlesstd': nparticlesstds
+    })
+    outdf.to_csv(pjoin(outdir, 'sir.csv'),
                              index=True, index_label='t')
 
     ########################################################## Plot SIR over time
     info('exp:{} Generating plots for counts of S, I, R'.format(expidx))
     fig, ax = plt.subplots(1, 1)
-    plot_sir(totalnsusceptibles, totalninfected, totalnrecovered, fig, ax, outdir)
+    plot_sir(statuscountsum[:, 0], statuscountsum[:, 1], statuscountsum[:, 2],
+             fig, ax, outdir)
     info('exp:{} Finished. Results are in {}'.format(expidx, outdir))
 
 def visualize_static_graph_layouts(g, layoutspath, outdir):
@@ -492,7 +495,7 @@ def step_mobility(g, particles, autoloop_prob):
     return particles
 
 ##########################################################
-def step_transmission(g, status, beta, gamma, particles, ntransmissions):
+def step_transmission(g, status, beta, gamma, particles):
     """Give a step in the transmission dynamic
 
     Args:
@@ -507,6 +510,7 @@ def step_transmission(g, status, beta, gamma, particles, ntransmissions):
     """
 
     statuses_fixed = copy.deepcopy(status)
+    ntransmissions = np.zeros((g.vcount()), dtype=int)
     for i, _ in enumerate(g.vs):
         statuses = statuses_fixed[particles[i]]
         N = len(statuses)
@@ -525,14 +529,13 @@ def step_transmission(g, status, beta, gamma, particles, ntransmissions):
         if numnewinfected > nsusceptible: numnewinfected = nsusceptible
         if numnewrecovered > ninfected: numnewrecovered = ninfected
 
-        ntransmissions[i] += numnewinfected
+        ntransmissions[i] = numnewinfected
         status[indsusceptible[0:numnewinfected]] = INFECTED
         status[indinfected[0:numnewrecovered]] = RECOVERED
     return status, ntransmissions
 
 ##########################################################
-def compute_statuses_sums(status, particles, nvertices, totalnsusceptibles,
-                          totalninfected, totalnrecovered, nclasses=3):
+def compute_statuses_sums(status, particles, nvertices, nclasses=3):
     """Compute the sum of each status
 
     Args:
@@ -554,14 +557,11 @@ def compute_statuses_sums(status, particles, nvertices, totalnsusceptibles,
         dist[i, :] = x
 
     sums = np.sum(dist, 0)
-    totalnsusceptibles.append(sums[0])
-    totalninfected.append(sums[1])
-    totalnrecovered.append(sums[2])
-    return dist[:, 0], dist[:, 1], dist[:, 2], totalnsusceptibles, totalninfected, totalnrecovered
+    return dist, np.sum(dist, 0)
 ##########################################################
 def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
                       N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
-                      totalnsusceptibles, totalninfected, totalnrecovered, outdir):
+                      outdir):
     susceptiblecolor = []
     infectedcolor = []
     recoveredcolor = []
