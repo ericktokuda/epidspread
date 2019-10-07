@@ -144,7 +144,7 @@ def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
     if graphlayout == 'grid':
         layout = g.layout(graphlayout)
     elif graphlayout == 'fr' or graphlayout == 'fruchterman_reingold':
-        # 1: maxiter, 2: maxdelta
+        # 1: maxiter[500] , 2:maxdelta[nvertices]
         if layoutparam2 == -1: layoutparam2 = graphsize # according to igraph doc
         layout = g.layout(graphlayout, maxiter=layoutparam1, maxdelta=layoutparam2)
 
@@ -318,7 +318,7 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
         if plotrate > 0 and ep % plotrate == 0:
             plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
                               N, b, outgradientspath,
-                              statuscount[:, 0], statuscount[:, 1], statuscount[:, 2],
+                              dist[:, 0], dist[:, 1], dist[:, 2],
                               outdir)
 
     ########################################################## Enhance plots
@@ -596,6 +596,15 @@ def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
                                                          outinfectedpath,
                                                          outrecoveredpath,
                                                          outconcatpath),
+                 shell=True, stdout=PIPE, stderr=PIPE)
+    stdout, stderr = proc.communicate()
+
+    # Delete individual files
+    proc = Popen('rm {} {} {} {}'.format(outgradientspath,
+                                         outsusceptiblepath,
+                                         outinfectedpath,
+                                         outrecoveredpath
+                                         ),
                  shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
 
