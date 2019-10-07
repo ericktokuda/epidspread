@@ -617,6 +617,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('config', help='Config file')
     parser.add_argument('--overwrite', action='store_true', help='Overwrite')
+    parser.add_argument('--shuffle', action='store_true', help='Shuffled traversing of config parameters')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s] %(message)s',
@@ -644,7 +645,7 @@ def main():
         df = pd.read_csv(expspath)
         aux = df.to_numpy()
         aux[:, -1] = aux[:, 0]
-        params = aux[:, 1:]
+        params = list(aux[:, 1:])
     else:
         aux = list(product(*cfg))
         params = []
@@ -665,6 +666,9 @@ def main():
             pstr += [socket.gethostname()]
             fh.write(','.join(pstr) + '\n')
         fh.close()
+        # params = np.array(params)
+
+    if args.shuffle: np.random.shuffle(params)
 
     if cfg.nprocs[0] <= 1:
         [ run_one_experiment_given_list(p) for p in params ]
