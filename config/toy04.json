@@ -10,18 +10,18 @@
         "layoutparam3" : [-1],
         "nepochs" : [50],
         "s0" : [100],
-        "i0" : [20],
+        "i0" : [40],
         "r0" : [0],
         "beta" : [0.5],
         "gamma" : [0.5],
         "graddist" : ["gaussian"],
         "gradparam1" : [1],
-        "gradparam2" : [0.5],
+        "gradparam2" : [0.1],
         "gradparam3" : [-1],
-        "autoloop_prob" : [0,0.5],
+        "autoloop_prob" : [0.5],
         "plotzoom" : [2],
         "plotrate" : [1],
-        "outdir" : ["/tmp/"],
+        "outdir" : ["/tmp/toy04/"],
         "nprocs" : [1],
-        "randomseed": [0,1,2]
+        "randomseed": [0]
 }

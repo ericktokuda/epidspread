@@ -21,7 +21,7 @@
         "autoloop_prob" : [0],
         "plotzoom" : [2],
         "plotrate" : [0],
-        "outdir" : ["/tmp/"],
+        "outdir" : ["/tmp/toy02/"],
         "nprocs" : [1],
-        "randomseed": [0,1,2]
+        "randomseed": [0]
 }
