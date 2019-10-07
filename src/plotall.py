@@ -4,6 +4,7 @@
 
 import argparse
 import logging
+import os
 from os.path import join as pjoin
 from logging import debug, info
 
@@ -13,6 +14,7 @@ import pandas as pd
 import scipy
 import scipy.stats
 
+import plotly
 import plotly.graph_objects as go
 from ipywidgets import widgets
 import plotly.express as px
@@ -199,40 +201,32 @@ def plot_all(indir):
     )
     fig.show()
 
-def plot_parallel_coordinates(indir):
-    iris = px.data.iris()
+def read_niterations(outdir):
+    """Read number of iterations for in each folder in @outdir
 
-    df = pd.read_csv(pjoin(indir, 'exps.csv'))
-    areai = []
+    Args:
+    outdir(str): results directory containing the subolders
 
-    for idx in df.idx:
-        aux = pd.read_csv(pjoin(indir, idx, 'sir.csv'))
-        areai.append(np.sum(aux.I))
+    Returns:
+    dict: folder names as keys and counts as values
+    """
 
-    df['areai'] = areai
-    gradstds = df['gradstd'].unique()
-    areai = np.ndarray((len(gradstds), 2))
+    counts = {}
 
-     # = np.ndarray((len(gradstds), 2))
+    for idx in os.listdir(outdir):
+        if not os.path.isdir(pjoin(outdir, idx)): continue
+        summarypath = pjoin(outdir, idx, 'sir.csv')
+        counts[idx] = sum(1 for line in open(summarypath))
 
-    for i, g in enumerate(gradstds):
-        rows = df.loc[df['gradstd'] == g]
-        mymean = np.mean(rows['areai'])
-        mystd = np.std(rows['areai'])
-        areai[i][0] = mymean
-        areai[i][1] = mystd
+    return counts
 
-    print(iris)
+def plot_parallel_coordinates(expsdf, plotcols, outdir):
 
-    fig = px.parallel_coordinates(areai,
-                                  # color="species_id",
-                                  # labels={"species_id": "Species",
-                                          # "sepal_width": "Sepal Width",
-                                          # "sepal_length": "Sepal Length",
-                                          # "petal_width": "Petal Width",
-                                          # "petal_length": "Petal Length", },
+    fig = px.parallel_coordinates(expsdf[plotcols.keys()],
+                                  labels=plotcols,
                                   color_continuous_scale=px.colors.diverging.Tealrose,
                                   color_continuous_midpoint=2)
+    plotly.offline.plot(fig, filename='name.html')
     fig.show()
 
 def main():
@@ -242,9 +236,31 @@ def main():
 
     logging.basicConfig(format='[%(asctime)s] %(message)s',
                         datefmt='%Y%m%d %H:%M', level=logging.DEBUG)
-    plot_all(args.resdir)
-    # plot_areai(args.resdir)
-    # plot_parallel_coordinates(args.resdir)
+
+    expspath = pjoin(args.resdir, 'exps.csv')
+    df = pd.read_csv(expspath, index_col='idx')
+    niterations = read_niterations(args.resdir)
+    niterations = pd.Series(niterations, index=df.index, dtype=int)
+    df['t'] = niterations
+
+    topologymap = {'lattice': 0, 'erdos': 1}
+    df['graphtopology'] = df.graphtopology.map(topologymap)
+
+    layoutmap = {'grid': 0, 'fr': 1, 'kk': 2}
+    df['graphlayout'] = df.graphlayout.map(layoutmap)
+
+    plotcols = {'graphtopology': 'topology',
+                'graphlayout': 'spatiality',
+                'graphparam1': 'param1',
+                'graphparam2': 'param2',
+                'beta': 'beta',
+                'gamma': 'gamma',
+                'gradparam2': 'gradients dispersion',
+                't': 'convergence time',
+                }
+
+    outdir = '/tmp'
+    plot_parallel_coordinates(df, plotcols, outdir)
 
 if __name__ == "__main__":
     main()
