@@ -110,12 +110,16 @@ def generate_lattice(n, thoroidal=False, s=10):
     return pos, adj
 #############################################################
 def run_one_experiment_given_list(l):
-    run_lattice_sir(*l)
+    # print(type(l))
+    # print(len(l))
+    run_experiment(l)
 
 #############################################################
-def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
-                   graphparam3, graphlayout, layoutparam1, layoutparam2, layoutparam3,
-                   plotarea):
+def generate_graph(topologymodel, nvertices,
+                   latticethoroidal, erdosprob,
+                   erdosloops, layoutmodel,
+                   frmaxiter, frmaxdelta,
+                   kkmaxiter, kkstd):
     """Generate graph with given topology
 
     Args:
@@ -127,44 +131,30 @@ def generate_graph(graphtopology, graphsize, graphparam1, graphparam2,
     igraph.Graph, np.ndarray: graph and the layout
     """
 
-    if graphtopology == 'lattice':
-        # 1: neigh, 2: thoroidal
-        mapside = int(np.sqrt(graphsize))
-        g = igraph.Graph.Lattice([mapside, mapside], nei=1, circular=graphparam2)
-    elif graphtopology == 'erdos':
-        # 1: probability
-        g = igraph.Graph.Erdos_Renyi(graphsize, graphparam1)
-    elif graphtopology == 'watts':
-        # 1: dimension, 2: size of the lattice, 3: rewiring prob
-        # graphsize =  x^k
-        # g = igraph.graph.(x, k, graphparam2, graphparam3)
-        # Watts_Strogatz(dim, size, nei, p
+    if topologymodel == 'lattice':
+        mapside = int(np.sqrt(nvertices))
+        g = igraph.Graph.Lattice([mapside, mapside], nei=1, circular=latticethoroidal)
+    elif topologymodel == 'erdos':
+        g = igraph.Graph.Erdos_Renyi(nvertices, erdosprob)
+    elif topologymodel == 'watts':
         pass
 
-    if graphlayout == 'grid':
-        layout = g.layout(graphlayout)
-    elif graphlayout == 'fr' or graphlayout == 'fruchterman_reingold':
-        # 1: maxiter[500] , 2:maxdelta[nvertices]
-        if layoutparam2 == -1: layoutparam2 = graphsize # according to igraph doc
-        layout = g.layout(graphlayout, maxiter=layoutparam1, maxdelta=layoutparam2)
+    layout = g.layout(layoutmodel) # To be overwritten if parameters
 
-    elif graphlayout == 'kk' or graphlayout == 'kamada_kawai':
-        # 1: maxiter, 2: std of the position change, 3: kk attraction const
-        if layoutparam2 == -1: layoutparam2 = graphsize/4 # according to igraph doc
-        if layoutparam3 == -1: layoutparam3 = graphsize**2 # according to igraph doc
-        layout = g.layout(graphlayout, maxiter=layoutparam1,
-                          sigma=layoutparam2, kkconst=layoutparam3)
+    if layoutmodel == 'grid':
+        layout = g.layout(layoutmodel)
+    elif layoutmodel == 'fr' or layoutmodel == 'fruchterman_reingold':
+        if frmaxiter != -1 or frmaxdelta != -1:
+            layout = g.layout(layoutmodel, maxiter=frmaxiter, maxdelta=frmaxdelta)
+    elif layoutmodel == 'kk' or layoutmodel == 'kamada_kawai':
+        if kkmaxiter != -1 and kksigma != -1:
+            layout = g.layout(graphlayout, maxiter=kkmaxiter, sigma=kksigma)
 
     aux = np.array(layout.coords)
-    coords = (aux - np.mean(aux, 0))/np.std(aux, 0)
+    coords = (aux - np.mean(aux, 0))/np.std(aux, 0) # stndard normalization
     return g, coords
 ##########################################################
-def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphparam3,
-                    graphlayout, layoutparam1, layoutparam2, layoutparam3,
-                    nepochs, s0, i0, r0,
-                    beta, gamma, graddist , gradparam1, gradparam2, gradparam3,
-                    autoloop_prob, plotzoom, plotrate, outdir,
-                    nprocs, randomseed, expidx):
+def run_experiment(cfg):
     """Main function
 
     Args:
@@ -176,70 +166,84 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
 
     t0 = time.time()
 
-    cfgdict = {}
-    keys = ['graphtopology', 'graphsize', 'graphparam1' , 'graphparam2' , 'graphparam3',
-            'graphlayout', 'layoutparam1', 'layoutparam2', 'layoutparam3',
-            'nepochs', 's0' , 'i0' , 'r0' ,
-            'beta', 'gamma' , 'graddist' , 'gradparam1', 'gradparam2', 'gradparam3',
-            'autoloop_prob' , 'plotzoom' , 'plotrate' , 'outdir' ,
-            'nprocs' , 'randomseed']
-    args = [graphtopology, graphsize, graphparam1, graphparam2, graphparam3,
-            graphlayout, layoutparam1, layoutparam2, layoutparam3,
-            nepochs, s0, i0, r0,
-            beta, gamma, graddist, gradparam1, gradparam2, gradparam3,
-            autoloop_prob, plotzoom, plotrate, outdir,
-            nprocs , randomseed]
-    for i, k in enumerate(keys):
-        cfgdict[k] = args[i]
+    cfgdf = pd.DataFrame.from_dict(cfg, 'index', columns=['data'])
 
-    # args = [mapside, nei, istoroid , nepochs , s0 , i0 , r0 ,
-    cfg = pd.DataFrame.from_dict(cfgdict, 'index', columns=['data'])
+    
+    ##########################################################  Local vars
+    outdir = cfg['outdir']
+    nvertices = cfg['nvertices']
+    topologymodel = cfg['topologymodel']
+    erdosprob = cfg['erdosprob']
+    erdosloops = cfg['erdosloops']
+    latticethoroidal = cfg['latticethoroidal']
+    layoutmodel = cfg['layoutmodel']
+    frmaxiter = cfg['frmaxiter']
+    frmaxdelta= cfg['frmaxdelta']
+    kkmaxiter = cfg['kkmaxiter']
+    kkstd     = cfg['kkstd']
+    nepochs   = cfg['nepochs']
+    s0        = cfg['s0']
+    i0        = cfg['i0']
+    r0        = cfg['r0']
+    beta      = cfg['beta']
+    gamma     = cfg['gamma']
+    graddist  = cfg['graddist']
+    ngaussians = cfg['ngaussians']
+    gaussianstds = cfg['gaussianstds']
+    autoloop_prob = cfg['autoloop_prob']
+    plotzoom  = cfg['plotzoom']
+    plotrate  = cfg['plotrate']
+    nprocs    = cfg['nprocs']
+    randomseed= cfg['randomseed']
+    expidx= cfg['expidx']
 
-    ########################################################## Cretate outdir
-    # expidxstr = '{:03d}'.format(expidx)
+
+    ########################################################## 
     outdir = pjoin(outdir, expidx)
-
     summarypath = pjoin(outdir, 'sir.csv')
     elapsedpath = pjoin(outdir, 'elapsed.csv')
     if os.path.exists(summarypath): return
-    os.makedirs(outdir, exist_ok=True)
+    os.makedirs(outdir, exist_ok=True) # Create outdir
+
     ##########################################################
     info('exp:{} Copying config file ...'.format(expidx))
-    cfg['data'].to_json(pjoin(outdir, 'config.json'), force_ascii=False)
+    cfgdf['data'].to_json(pjoin(outdir, 'config.json'), force_ascii=False)
 
-    mapside = int(np.sqrt(graphsize))
-    nei = graphparam1
-    istoroid = graphparam2
 
-    dim = [mapside, mapside]
+    mapside = int(np.sqrt(nvertices))
+    istoroid = latticethoroidal
     N = s0 + i0 + r0
-    nvertices = mapside**2 # square lattice
     status = np.ndarray(N, dtype=int)
-    status[0: s0] = SUSCEPTIBLE
-    status[s0:s0+i0] = INFECTED
-    status[s0+i0:] = RECOVERED
+    status[0: cfg['s0']] = SUSCEPTIBLE
+    status[cfg['s0']:cfg['s0']+cfg['i0']] = INFECTED
+    status[cfg['s0']+cfg['i0']:] = RECOVERED
     np.random.shuffle(status)
-    info('exp:{} Generated random distribution of S, I, R ...'.format(expidx))
+    info('exp:{} Generated random distribution of S, I, R ...'.format(cfg['expidx']))
 
     visual = {}
-    visual["bbox"] = (mapside*10*plotzoom, mapside*10*plotzoom)
-    visual["margin"] = mapside*plotzoom
-    visual["vertex_size"] = 10*plotzoom
+    visual["bbox"] = (mapside*10*cfg['plotzoom'], mapside*10*cfg['plotzoom'])
+    visual["margin"] = mapside*cfg['plotzoom']
+    visual["vertex_size"] = 10*cfg['plotzoom']
 
     statuscountsum = np.zeros((MAXITERS, 3), dtype=int)
-    statuscountsum[0, :] = np.array([s0, i0, r0])
+    statuscountsum[0, :] = np.array([cfg['s0'], cfg['i0'], cfg['r0']])
 
-    aux = '' if istoroid else 'non-'
+
+    aux = '' if cfg['latticethoroidal'] else 'non-'
     info('exp:{} Generating {}toroidal lattice with dim ({}, {}) ...'.format(expidx,
                                                                              aux,
                                                                              mapside,
                                                                              mapside,
                                                                              ))
+
     plotarea = 36   # Square of the center surrounded by radius 3
                     # (equiv to 99.7% of the points of a gaussian)
-    g, coords = generate_graph(graphtopology, graphsize, graphparam1,
-                               graphparam2, graphparam3, graphlayout,
-                               layoutparam1, layoutparam2, layoutparam3, plotarea)
+
+    g, coords =  generate_graph(topologymodel, nvertices,
+                                latticethoroidal, erdosprob,
+                                erdosloops, layoutmodel,
+                                frmaxiter, frmaxdelta,
+                                kkmaxiter, kkstd)
 
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
 
@@ -264,9 +268,8 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
     nparticlesstds = np.zeros((MAXITERS,), dtype=float)
 
     ########################################################## Distrib. of gradients
-    gradstd = gradparam2
     info('exp:{} Initializing gradients distribution ...'.format(expidx))
-    g = initialize_gradients(g, coords, graddist, gradstd)
+    g = initialize_gradients(g, coords, graddist, gaussianstds)
     info('exp:{} Exporting relief map...'.format(expidx))
 
     aux = pd.DataFrame()
@@ -359,6 +362,7 @@ def run_lattice_sir(graphtopology, graphsize, graphparam1, graphparam2, graphpar
 ########################################################## Plot SIR over time
 def visualize_static_graph_layouts(g, layoutspath, outdir):
     layouts = [line.rstrip('\n') for line in open(layoutspath)]
+    print(layouts)
     for l in layouts:
         info(l)
         try:
@@ -650,6 +654,8 @@ def main():
 
     expspath = pjoin(outdir, 'exps.csv')
 
+    cfgkeys = list(cfg.index)
+
     if existing and os.path.exists(expspath): # Load config from exps
         df = pd.read_csv(expspath)
         aux = df.to_numpy()
@@ -664,13 +670,20 @@ def main():
 
         hashsz = 6
         hashes = []
+        # TODO: generate hash from hostname
         fixedchar = random_string(1)
+
         for i in range(len(aux)):
             while True:
                 hash = fixedchar + random_string(hashsz - 1)
                 if hash not in hashes: break
             hashes.append(hash)
-            params.append(list(aux[i]) + [hash])
+            param = {}
+            for j, key in enumerate(cfgkeys):
+                param[key] = aux[i][j]
+            # params.append(list(aux[i]) + [hash])
+            param['expidx'] = hash
+            params.append(param)
             pstr = [str(x) for x in [hash] + list(aux[i])]
             pstr += [socket.gethostname()]
             fh.write(','.join(pstr) + '\n')
@@ -679,7 +692,7 @@ def main():
 
     if args.shuffle: np.random.shuffle(params)
 
-    if cfg.nprocs[0] <= 1:
+    if cfg.nprocs[0] == 1:
         [ run_one_experiment_given_list(p) for p in params ]
     else:
         pool = Pool(cfg.nprocs[0])

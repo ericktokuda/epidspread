@@ -226,8 +226,8 @@ def plot_parallel_coordinates(expsdf, plotcols, outdir):
                                   labels=plotcols,
                                   color_continuous_scale=px.colors.diverging.Tealrose,
                                   color_continuous_midpoint=2)
-    plotly.offline.plot(fig, filename='name.html')
-    fig.show()
+    plotpath = pjoin(outdir, 'parallel.html')
+    plotly.offline.plot(fig, filename=plotpath, auto_open=False)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
