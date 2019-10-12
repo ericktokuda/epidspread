@@ -116,7 +116,7 @@ def run_one_experiment_given_list(l):
 
 #############################################################
 def generate_graph(topologymodel, nvertices,
-                   latticethoroidal, erdosprob,
+                   latticethoroidal, erdosavgdegree,
                    erdosloops, layoutmodel,
                    frmaxiter, frmaxdelta,
                    kkmaxiter, kkstd):
@@ -135,6 +135,7 @@ def generate_graph(topologymodel, nvertices,
         mapside = int(np.sqrt(nvertices))
         g = igraph.Graph.Lattice([mapside, mapside], nei=1, circular=latticethoroidal)
     elif topologymodel == 'erdos':
+        erdosprob = erdosavgdegree / nvertices
         g = igraph.Graph.Erdos_Renyi(nvertices, erdosprob)
     elif topologymodel == 'watts':
         pass
@@ -173,7 +174,7 @@ def run_experiment(cfg):
     outdir = cfg['outdir']
     nvertices = cfg['nvertices']
     topologymodel = cfg['topologymodel']
-    erdosprob = cfg['erdosprob']
+    erdosavgdegree = cfg['erdosavgdegree']
     erdosloops = cfg['erdosloops']
     latticethoroidal = cfg['latticethoroidal']
     layoutmodel = cfg['layoutmodel']
@@ -240,7 +241,7 @@ def run_experiment(cfg):
                     # (equiv to 99.7% of the points of a gaussian)
 
     g, coords =  generate_graph(topologymodel, nvertices,
-                                latticethoroidal, erdosprob,
+                                latticethoroidal, erdosavgdegree,
                                 erdosloops, layoutmodel,
                                 frmaxiter, frmaxdelta,
                                 kkmaxiter, kkstd)
@@ -272,6 +273,13 @@ def run_experiment(cfg):
     g = initialize_gradients(g, coords, graddist, gaussianstds)
     info('exp:{} Exporting relief map...'.format(expidx))
 
+    # print(np.max(coords))
+    # print(np.min(coords))
+    # print(np.max(g.vs['gradient']))
+    # print(np.min(g.vs['gradient']))
+    # print(np.mean(g.vs['gradient']))
+    # print(np.std(g.vs['gradient']))
+    # input()
     aux = pd.DataFrame()
 
     aux['x'] = coords[:, 0]
@@ -668,14 +676,14 @@ def main():
         colnames = ['idx'] + (list(cfg.index)) + ['hostname']
         fh.write(','.join(colnames) + '\n')
 
-        hashsz = 6
+        hashsz = 8
         hashes = []
         # TODO: generate hash from hostname
-        fixedchar = random_string(1)
-
+        hostname = socket.gethostname()
+        fixedchars = hostname[:2]
         for i in range(len(aux)):
             while True:
-                hash = fixedchar + random_string(hashsz - 1)
+                hash = fixedchars + random_string(hashsz - 2)
                 if hash not in hashes: break
             hashes.append(hash)
             param = {}
@@ -685,7 +693,7 @@ def main():
             param['expidx'] = hash
             params.append(param)
             pstr = [str(x) for x in [hash] + list(aux[i])]
-            pstr += [socket.gethostname()]
+            pstr += [hostname]
             fh.write(','.join(pstr) + '\n')
         fh.close()
         # params = np.array(params)
