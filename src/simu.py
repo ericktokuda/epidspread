@@ -136,6 +136,7 @@ def generate_graph(topologymodel, nvertices,
         g = igraph.Graph.Lattice([mapside, mapside], nei=1, circular=latticethoroidal)
     elif topologymodel == 'erdos':
         erdosprob = erdosavgdegree / nvertices
+        if erdosprob > 1: erdosprob = 1
         g = igraph.Graph.Erdos_Renyi(nvertices, erdosprob)
     elif topologymodel == 'watts':
         pass
