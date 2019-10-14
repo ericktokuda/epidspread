@@ -167,9 +167,7 @@ def run_experiment(cfg):
     """
 
     t0 = time.time()
-
     cfgdf = pd.DataFrame.from_dict(cfg, 'index', columns=['data'])
-
     
     ##########################################################  Local vars
     outdir = cfg['outdir']
@@ -280,7 +278,6 @@ def run_experiment(cfg):
     # print(np.min(g.vs['gradient']))
     # print(np.mean(g.vs['gradient']))
     # print(np.std(g.vs['gradient']))
-    # input()
     aux = pd.DataFrame()
 
     aux['x'] = coords[:, 0]
@@ -667,19 +664,16 @@ def main():
 
     if existing and os.path.exists(expspath): # Load config from exps
         df = pd.read_csv(expspath)
-        aux = df.to_numpy()
-        aux[:, -1] = aux[:, 0]
-        params = list(aux[:, 1:])
+        params = df.to_dict(orient='records')
     else:
         aux = list(product(*cfg))
         params = []
         fh = open(expspath, 'w')
-        colnames = ['idx'] + (list(cfg.index)) + ['hostname']
+        colnames = ['expidx'] + (list(cfg.index)) + ['hostname']
         fh.write(','.join(colnames) + '\n')
 
         hashsz = 8
         hashes = []
-        # TODO: generate hash from hostname
         hostname = socket.gethostname()
         fixedchars = hostname[:2]
         for i in range(len(aux)):
@@ -690,14 +684,12 @@ def main():
             param = {}
             for j, key in enumerate(cfgkeys):
                 param[key] = aux[i][j]
-            # params.append(list(aux[i]) + [hash])
             param['expidx'] = hash
             params.append(param)
             pstr = [str(x) for x in [hash] + list(aux[i])]
             pstr += [hostname]
             fh.write(','.join(pstr) + '\n')
         fh.close()
-        # params = np.array(params)
 
     if args.shuffle: np.random.shuffle(params)
 
@@ -706,7 +698,6 @@ def main():
     else:
         pool = Pool(cfg.nprocs[0])
         pool.map(run_one_experiment_given_list, params)
-
 
 if __name__ == "__main__":
     main()
