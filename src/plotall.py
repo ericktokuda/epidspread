@@ -244,18 +244,18 @@ def main():
     df['t'] = niterations
 
     topologymap = {'lattice': 0, 'erdos': 1}
-    df['graphtopology'] = df.graphtopology.map(topologymap)
+    df['topologymodel'] = df.topologymodel.map(topologymap)
 
     layoutmap = {'grid': 0, 'fr': 1, 'kk': 2}
-    df['graphlayout'] = df.graphlayout.map(layoutmap)
+    df['layoutmodel'] = df.layoutmodel.map(layoutmap)
 
-    plotcols = {'graphtopology': 'topology',
-                'graphlayout': 'spatiality',
-                'graphparam1': 'param1',
-                'graphparam2': 'param2',
+    plotcols = {'topologymodel': 'topology',
+                'layoutmodel': 'spatiality',
+                'erdosavgdegree': 'erdos-avgdegr',
+                'latticethoroidal': 'lattice-thoroidal',
                 'beta': 'beta',
                 'gamma': 'gamma',
-                'gradparam2': 'gradients dispersion',
+                'gaussianstds': 'gradients dispersion',
                 't': 'convergence time',
                 }
 
