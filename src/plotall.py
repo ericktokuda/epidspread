@@ -28,8 +28,8 @@ def plot_areai(indir):
     df = pd.read_csv(pjoin(indir, 'exps.csv'))
     areai = []
 
-    for idx in df.idx:
-        aux = pd.read_csv(pjoin(indir, idx, 'sir.csv'))
+    for expidx in df.expidx:
+        aux = pd.read_csv(pjoin(indir, expidx, 'sir.csv'))
         areai.append(np.sum(aux.I))
 
     df['areai'] = areai
@@ -81,8 +81,8 @@ def plot_areai(indir):
     df = pd.read_csv(pjoin(indir, 'exps.csv'))
     areai = []
 
-    for idx in df.idx:
-        aux = pd.read_csv(pjoin(indir, idx, 'sir.csv'))
+    for expidx in df.expidx:
+        aux = pd.read_csv(pjoin(indir, expidx, 'sir.csv'))
         areai.append(np.sum(aux.I))
 
     df['areai'] = areai
@@ -134,8 +134,8 @@ def plot_all(indir):
     modes = []
     argmins = []
     areai = []
-    for idx in df.idx:
-        aux = pd.read_csv(pjoin(indir, idx, 'sir.csv'))
+    for expidx in df.expidx:
+        aux = pd.read_csv(pjoin(indir, expidx, 'sir.csv'))
 
         mymode = np.argmax(aux.I)
         modes.append(int(mymode))
@@ -213,43 +213,81 @@ def read_niterations(outdir):
 
     counts = {}
 
-    for idx in os.listdir(outdir):
-        if not os.path.isdir(pjoin(outdir, idx)): continue
-        summarypath = pjoin(outdir, idx, 'sir.csv')
-        counts[idx] = sum(1 for line in open(summarypath))
+    for expidx in os.listdir(outdir):
+        if not os.path.isdir(pjoin(outdir, expidx)): continue
+        summarypath = pjoin(outdir, expidx, 'sir.csv')
+        counts[expidx] = sum(1 for line in open(summarypath))
 
     return counts
 
-def plot_parallel_coordinates(expsdf, plotcols, outdir):
+def get_inverse_map(mydict):
+    return {v: k for k, v in mydict.items()}
 
-    fig = px.parallel_coordinates(expsdf[plotcols.keys()],
-                                  labels=plotcols,
-                                  color_continuous_scale=px.colors.diverging.Tealrose,
-                                  color_continuous_midpoint=2)
+def remap_to_categorical_data(df, cols):
+    tickslabels = {}
+    for col in cols:
+        vals = sorted(df[col].unique())
+        tickslabels[col] = vals
+        aux = dict(enumerate(vals))
+        aux = get_inverse_map(aux)
+        df[col] = df[col].map(aux)
+    return df, tickslabels
+
+def plot_parallel_coordinates(expsdf, colslabels, categcols, tickslabels, outdir):
+
+    dimensions = []
+    for col in categcols: # categorical columns
+        colname = colslabels[col]
+        plotcol = dict(
+            label = colname,
+            values = expsdf[col],
+            tickvals = list(range(len(tickslabels[col]))),
+            ticktext = tickslabels[col])
+        dimensions.append(plotcol)
+
+    dimensions.append(
+        dict(label = 'Convergence time',
+             values = expsdf['t'],
+    ))
+
+    fig = go.Figure(data=go.Parcoords(
+        line_color='blue',
+        dimensions = dimensions
+    )
+                    )
     plotpath = pjoin(outdir, 'parallel.html')
     plotly.offline.plot(fig, filename=plotpath, auto_open=False)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('resdir', help='Directory containing the output from lattice-sir')
+    parser.add_argument('resdir', nargs='+',
+                        help='Directory(ies) containing the output from lattice-sir')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s] %(message)s',
                         datefmt='%Y%m%d %H:%M', level=logging.DEBUG)
 
-    expspath = pjoin(args.resdir, 'exps.csv')
-    df = pd.read_csv(expspath, index_col='idx')
-    niterations = read_niterations(args.resdir)
-    niterations = pd.Series(niterations, index=df.index, dtype=int)
-    df['t'] = niterations
+    outdir = '/tmp'
 
-    topologymap = {'lattice': 0, 'erdos': 1}
-    df['topologymodel'] = df.topologymodel.map(topologymap)
+    # topologymap = {'erdos': 0, 'lattice': 1}
+    topologynames = sorted(['erdos', 'lattice'])
+    layoutnames = sorted(['grid', 'fr', 'kk'])
+    erdosavgdegrnames = ['DotNotApply', '1', '4', '10', 'Fully']
+    # layoutmap = {'fr': 0, 'grid': 1, 'kk': 2}
 
-    layoutmap = {'grid': 0, 'fr': 1, 'kk': 2}
-    df['layoutmodel'] = df.layoutmodel.map(layoutmap)
+    dfs = []
+    for i, resdir in enumerate(args.resdir):
+        expspath = pjoin(resdir, 'exps.csv')
+        df = pd.read_csv(expspath, index_col='expidx')
+        niterations = read_niterations(resdir)
+        niterations = pd.Series(niterations, index=df.index, dtype=int)
+        df['t'] = niterations
+        # df['topologymodel'] = df.topologymodel.map(topologymap)
+        # df['layoutmodel'] = df.layoutmodel.map(layoutmap)
+        dfs.append(df)
 
-    plotcols = {'topologymodel': 'topology',
+    df = pd.concat(dfs)
+    colslabels = {'topologymodel': 'topology',
                 'layoutmodel': 'spatiality',
                 'erdosavgdegree': 'erdos-avgdegr',
                 'latticethoroidal': 'lattice-thoroidal',
@@ -258,9 +296,11 @@ def main():
                 'gaussianstds': 'gradients dispersion',
                 't': 'convergence time',
                 }
-
-    outdir = '/tmp'
-    plot_parallel_coordinates(df, plotcols, outdir)
+    df = df[colslabels.keys()]
+    categcols = list(colslabels.keys())
+    categcols.remove('t')
+    expsdf, tickslabels = remap_to_categorical_data(df, categcols)
+    plot_parallel_coordinates(expsdf, colslabels, categcols, tickslabels, outdir)
 
 if __name__ == "__main__":
     main()

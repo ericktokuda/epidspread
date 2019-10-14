@@ -610,8 +610,7 @@ def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
     stdout, stderr = proc.communicate()
 
     # Delete individual files
-    proc = Popen('rm {} {} {} {}'.format(outgradientspath,
-                                         outsusceptiblepath,
+    proc = Popen('rm {} {} {} '.format(outsusceptiblepath,
                                          outinfectedpath,
                                          outrecoveredpath
                                          ),
