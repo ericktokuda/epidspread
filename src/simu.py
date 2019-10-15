@@ -110,8 +110,6 @@ def generate_lattice(n, thoroidal=False, s=10):
     return pos, adj
 #############################################################
 def run_one_experiment_given_list(l):
-    # print(type(l))
-    # print(len(l))
     run_experiment(l)
 
 #############################################################
@@ -166,6 +164,7 @@ def run_experiment(cfg):
     ret
     """
 
+    plotalpha = .9
     t0 = time.time()
     cfgdf = pd.DataFrame.from_dict(cfg, 'index', columns=['data'])
     
@@ -223,7 +222,9 @@ def run_experiment(cfg):
     visual = {}
     visual["bbox"] = (mapside*10*cfg['plotzoom'], mapside*10*cfg['plotzoom'])
     visual["margin"] = mapside*cfg['plotzoom']
-    visual["vertex_size"] = 10*cfg['plotzoom']
+    visual["vertex_size"] = 5*cfg['plotzoom']
+    visual["vertex_shape"] = 'circle'
+
 
     statuscountsum = np.zeros((MAXITERS, 3), dtype=int)
     statuscountsum[0, :] = np.array([cfg['s0'], cfg['i0'], cfg['r0']])
@@ -272,12 +273,6 @@ def run_experiment(cfg):
     g = initialize_gradients(g, coords, graddist, gaussianstds)
     info('exp:{} Exporting relief map...'.format(expidx))
 
-    # print(np.max(coords))
-    # print(np.min(coords))
-    # print(np.max(g.vs['gradient']))
-    # print(np.min(g.vs['gradient']))
-    # print(np.mean(g.vs['gradient']))
-    # print(np.std(g.vs['gradient']))
     aux = pd.DataFrame()
 
     aux['x'] = coords[:, 0]
@@ -290,14 +285,14 @@ def run_experiment(cfg):
         info('exp:{} Generating plots for epoch 0'.format(expidx))
 
         aux = np.sum(g.vs['gradient'])
-        gradientscolors = [ [c, c, c] for c in g.vs['gradient']]
+        gradientscolors = [ [c, c, c, plotalpha] for c in g.vs['gradient']]
         # gradientscolors = [1, 1, 1]*g.vs['gradient']
         gradsum = float(np.sum(g.vs['gradient']))
         gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
         outgradientspath = pjoin(outdir, 'gradients.png')
         igraph.plot(g, target=outgradientspath, layout=coords.tolist(),
-                    vertex_shape='rectangle', vertex_color=gradientscolors,
-                    vertex_frame_width=0.0, **visual)      
+                    vertex_color=gradientscolors,
+                    **visual)
 
         b = 0.1 # For colors definition
         ########################################################## Plot epoch 0
@@ -307,6 +302,8 @@ def run_experiment(cfg):
                           N, b, outgradientspath,
                           statuscount[:, 0], statuscount[:, 1], statuscount[:, 2],
                           outdir)
+        visual["vertex_frame_width"] = 0
+        visual["edge_width"] = 0.0
 
     maxepoch = nepochs if nepochs > 0 else MAX
 
@@ -366,14 +363,15 @@ def run_experiment(cfg):
     info('exp:{} Finished. Results are in {}'.format(expidx, outdir))
 
 ########################################################## Plot SIR over time
-def visualize_static_graph_layouts(g, layoutspath, outdir):
+def visualize_static_graph_layouts(g, layoutspath, outdir, plotalpha=.9):
     layouts = [line.rstrip('\n') for line in open(layoutspath)]
     print(layouts)
     for l in layouts:
         info(l)
         try:
             igraph.plot(g, target=pjoin(outdir, l + '.png'), layout=g.layout(l),
-                        vertex_color='lightgrey',
+                        vertex_frame_width=0,
+                        vertex_color=[.5, .5, .5, plotalpha],
                         vertex_label=list(range(g.vcount())))
         except Exception:
             pass
@@ -577,28 +575,31 @@ def compute_statuses_sums(status, particles, nvertices, nclasses=3):
 ##########################################################
 def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
                       N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
-                      outdir):
+                      outdir, plotalpha=.9):
     susceptiblecolor = []
     infectedcolor = []
     recoveredcolor = []
 
     for z in nsusceptibles:
-        zz = [0, math.log(z, N), 0] if z*N > 1 else [0, 0, 0] # Bug on log(1,1)
+        zz = [0, math.log(z, N), 0, plotalpha] if z*N > 1 else [0, 0, 0, plotalpha] # Bug on log(1,1)
         susceptiblecolor.append(zz)
     for z in ninfected:
-        zz = [math.log(z, N), 0, 0] if z*N > 1 else [0, 0, 0]
+        zz = [math.log(z, N), 0, 0, plotalpha] if z*N > 1 else [0, 0, 0, plotalpha]
         infectedcolor.append(zz)
     for z in nrecovered:
-        zz = [0, 0,  math.log(z, N)] if z*N > 1 else [0, 0, 0]
+        zz = [0, 0,  math.log(z, N), plotalpha] if z*N > 1 else [0, 0, 0, plotalpha]
         recoveredcolor.append(zz)  
         
     outsusceptiblepath = pjoin(outdir, 'susceptible{:02d}.png'.format(ep+1))
     outinfectedpath = pjoin(outdir, 'infected{:02d}.png'.format(ep+1))
     outrecoveredpath = pjoin(outdir, 'recovered{:02d}.png'.format(ep+1))
 
-    igraph.plot(g, target=outsusceptiblepath, layout=coords.tolist(), vertex_shape='rectangle', vertex_color=susceptiblecolor, vertex_frame_width=0.0, **visual)
-    igraph.plot(g, target=outinfectedpath, layout=coords.tolist(), vertex_shape='rectangle', vertex_color=infectedcolor, vertex_frame_width=0.0, **visual)
-    igraph.plot(g, target=outrecoveredpath, layout=coords.tolist(), vertex_shape='rectangle', vertex_color=recoveredcolor, vertex_frame_width=0.0, **visual)
+    igraph.plot(g, target=outsusceptiblepath, layout=coords.tolist(),
+                vertex_color=susceptiblecolor, **visual)
+    igraph.plot(g, target=outinfectedpath, layout=coords.tolist(),
+                vertex_color=infectedcolor, **visual)
+    igraph.plot(g, target=outrecoveredpath, layout=coords.tolist(),
+                vertex_color=recoveredcolor, **visual)
 
     outconcatpath = pjoin(outdir, 'concat{:02d}.png'.format(ep+1))
     proc = Popen('convert {} {} {} {} +append {}'.format(outgradientspath,
