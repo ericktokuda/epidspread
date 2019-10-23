@@ -154,10 +154,7 @@ def run_experiment(cfg):
     """Main function
 
     Args:
-    params
-
-    Returns:
-    ret
+    cfg(dict): dict of parameters
     """
 
     plotalpha = .9
@@ -199,8 +196,13 @@ def run_experiment(cfg):
 
     ##########################################################
     info('exp:{} Copying config file ...'.format(expidx))
-    cfgdf['data'].to_json(pjoin(outdir, 'config.json'), force_ascii=False)
+    kk = cfgdf['data']
+    # for k in kk.keys():
+        # kk[k] = [kk[k]]
 
+    for k in cfgdf['data'].keys():
+        cfgdf['data'][k] = [cfgdf['data'][k]]
+    cfgdf['data'].to_json(pjoin(outdir, 'config.json'), force_ascii=False)
 
     mapside = int(np.sqrt(nvertices))
     istoroid = latticethoroidal
@@ -217,6 +219,7 @@ def run_experiment(cfg):
     visual["margin"] = mapside*cfg['plotzoom']
     visual["vertex_size"] = 5*cfg['plotzoom']
     visual["vertex_shape"] = 'circle'
+    visual["vertex_frame_width"] = 0
 
 
     statuscountsum = np.zeros((MAXITERS, 3), dtype=int)
@@ -289,12 +292,11 @@ def run_experiment(cfg):
         ########################################################## Plot epoch 0
         statuscount, _  = compute_statuses_sums(status, particles, nvertices, )
 
+        visual["edge_width"] = 0.0
         plot_epoch_graphs(-1, g, coords, visual, status, nvertices, particles,
                           N, b, outgradientspath,
                           statuscount[:, 0], statuscount[:, 1], statuscount[:, 2],
                           outdir)
-        visual["vertex_frame_width"] = 0
-        visual["edge_width"] = 0.0
 
     maxepoch = nepochs if nepochs > 0 else MAX
 
@@ -516,6 +518,7 @@ def step_transmission(g, status, beta, gamma, particles):
 
     statuses_fixed = copy.deepcopy(status)
     ntransmissions = np.zeros((g.vcount()), dtype=int)
+
     for i, _ in enumerate(g.vs):
         statuses = statuses_fixed[particles[i]]
         N = len(statuses)
@@ -634,28 +637,23 @@ def generate_params_combinations(origcfg):
         aux.topologymodel = ['la']
         aux.lathoroidal = origcfg.lathoroidal
         aux.avgdegree = [4]
-        print(len(list(product(*aux))))
         params += list(product(*aux))
 
     if 'er' in cfg.topologymodel:
         aux = cfg.copy()
         aux.topologymodel = ['er']
-        print(len(list(product(*aux))))
-        print((list(product(*aux))))
         params += list(product(*aux))
 
     if 'ba' in cfg.topologymodel:
         aux = cfg.copy()
         aux.topologymodel = ['ba']
         aux['baoutpref'] = origcfg.baoutpref
-        print(len(list(product(*aux))))
         params += list(product(*aux))
 
     if 'ws' in cfg.topologymodel:
         aux = cfg.copy()
         aux.topologymodel = ['ws']
         aux['wsrewiring'] = origcfg.wsrewiring
-        print(len(list(product(*aux))))
         params += list(product(*aux))
 
     return params
@@ -672,7 +670,6 @@ def main():
 
     cfg = pd.read_json(args.config, typ='series', precise_float=True) # Load config
 
-    # outdir = pjoin(cfg.outdir[0], datetime.now().strftime('%Y%m%d_%H%M') + '-agentssir')
     outdir = cfg.outdir[0]
 
     info('Files will be generated in {}/...'.format(outdir))
