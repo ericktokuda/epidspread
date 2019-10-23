@@ -113,11 +113,8 @@ def run_one_experiment_given_list(l):
     run_experiment(l)
 
 #############################################################
-def generate_graph(topologymodel, nvertices,
-                   latticethoroidal, erdosavgdegree,
-                   erdosloops, layoutmodel,
-                   frmaxiter, frmaxdelta,
-                   kkmaxiter, kkstd):
+def generate_graph(topologymodel, nvertices, avgdegree,
+                   latticethoroidal, baoutpref, wsrewiring):
     """Generate graph with given topology
 
     Args:
@@ -129,26 +126,25 @@ def generate_graph(topologymodel, nvertices,
     igraph.Graph, np.ndarray: graph and the layout
     """
 
-    if topologymodel == 'lattice':
+    if topologymodel == 'la':
         mapside = int(np.sqrt(nvertices))
         g = igraph.Graph.Lattice([mapside, mapside], nei=1, circular=latticethoroidal)
-    elif topologymodel == 'erdos':
-        erdosprob = erdosavgdegree / nvertices
+        layout = g.layout('grid')
+    elif topologymodel == 'er':
+        erdosprob = avgdegree / nvertices
         if erdosprob > 1: erdosprob = 1
         g = igraph.Graph.Erdos_Renyi(nvertices, erdosprob)
-    elif topologymodel == 'watts':
-        pass
-
-    layout = g.layout(layoutmodel) # To be overwritten if parameters
-
-    if layoutmodel == 'grid':
-        layout = g.layout(layoutmodel)
-    elif layoutmodel == 'fr' or layoutmodel == 'fruchterman_reingold':
-        if frmaxiter != -1 or frmaxdelta != -1:
-            layout = g.layout(layoutmodel, maxiter=frmaxiter, maxdelta=frmaxdelta)
-    elif layoutmodel == 'kk' or layoutmodel == 'kamada_kawai':
-        if kkmaxiter != -1 and kksigma != -1:
-            layout = g.layout(graphlayout, maxiter=kkmaxiter, sigma=kksigma)
+        layout = g.layout('fr')
+    elif topologymodel == 'ba':
+        m = round(avgdegree/2)
+        if m == 0: m = 1
+        g = igraph.Graph.Barabasi(nvertices, m)
+        layout = g.layout('fr')
+    elif topologymodel == 'ws':
+        m = round(avgdegree/2)
+        if m == 0: m = 1
+        g = igraph.Graph.Watts_Strogatz(nvertices, m)
+        layout = g.layout('fr')
 
     aux = np.array(layout.coords)
     coords = (aux - np.mean(aux, 0))/np.std(aux, 0) # stndard normalization
@@ -172,30 +168,27 @@ def run_experiment(cfg):
     outdir = cfg['outdir']
     nvertices = cfg['nvertices']
     topologymodel = cfg['topologymodel']
-    erdosavgdegree = cfg['erdosavgdegree']
-    erdosloops = cfg['erdosloops']
-    latticethoroidal = cfg['latticethoroidal']
-    layoutmodel = cfg['layoutmodel']
-    frmaxiter = cfg['frmaxiter']
-    frmaxdelta= cfg['frmaxdelta']
-    kkmaxiter = cfg['kkmaxiter']
-    kkstd     = cfg['kkstd']
+    avgdegree = cfg['avgdegree']
+    latticethoroidal = cfg['lathoroidal']
+    baoutpref = cfg['baoutpref']
+    wsrewiring = cfg['wsrewiring']
     nepochs   = cfg['nepochs']
-    s0        = cfg['s0']
-    i0        = cfg['i0']
-    r0        = cfg['r0']
+    nagents = 2*nvertices
+    s0        = int(nagents*cfg['s0'])
+    i0        = int(nagents*cfg['i0'])
+    r0        = int(nagents*cfg['r0'])
     beta      = cfg['beta']
     gamma     = cfg['gamma']
-    graddist  = cfg['graddist']
     ngaussians = cfg['ngaussians']
-    gaussianstds = cfg['gaussianstds']
-    autoloop_prob = cfg['autoloop_prob']
+    gaussianstd = cfg['gaussianstd']
     plotzoom  = cfg['plotzoom']
     plotrate  = cfg['plotrate']
     nprocs    = cfg['nprocs']
     randomseed= cfg['randomseed']
     expidx= cfg['expidx']
 
+    # TODO: fix it according to the gaussian
+    autoloop_prob = 0.5
 
     ########################################################## 
     outdir = pjoin(outdir, expidx)
@@ -213,9 +206,9 @@ def run_experiment(cfg):
     istoroid = latticethoroidal
     N = s0 + i0 + r0
     status = np.ndarray(N, dtype=int)
-    status[0: cfg['s0']] = SUSCEPTIBLE
-    status[cfg['s0']:cfg['s0']+cfg['i0']] = INFECTED
-    status[cfg['s0']+cfg['i0']:] = RECOVERED
+    status[0: s0] = SUSCEPTIBLE
+    status[s0:s0+i0] = INFECTED
+    status[s0+i0:] = RECOVERED
     np.random.shuffle(status)
     info('exp:{} Generated random distribution of S, I, R ...'.format(cfg['expidx']))
 
@@ -230,21 +223,19 @@ def run_experiment(cfg):
     statuscountsum[0, :] = np.array([cfg['s0'], cfg['i0'], cfg['r0']])
 
 
-    aux = '' if cfg['latticethoroidal'] else 'non-'
-    info('exp:{} Generating {}toroidal lattice with dim ({}, {}) ...'.format(expidx,
-                                                                             aux,
-                                                                             mapside,
-                                                                             mapside,
-                                                                             ))
+    # TODO: fix message
+    # aux = '' if cfg['latticethoroidal'] else 'non-'
+    # info('exp:{} Generating {}toroidal lattice with dim ({}, {}) ...'.format(expidx,
+                                                                             # aux,
+                                                                             # mapside,
+                                                                             # mapside,
+                                                                             # ))
 
     plotarea = 36   # Square of the center surrounded by radius 3
                     # (equiv to 99.7% of the points of a gaussian)
 
-    g, coords =  generate_graph(topologymodel, nvertices,
-                                latticethoroidal, erdosavgdegree,
-                                erdosloops, layoutmodel,
-                                frmaxiter, frmaxdelta,
-                                kkmaxiter, kkstd)
+    g, coords =  generate_graph(topologymodel, nvertices, avgdegree,
+                                latticethoroidal, baoutpref, wsrewiring)
 
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
 
@@ -270,7 +261,7 @@ def run_experiment(cfg):
 
     ########################################################## Distrib. of gradients
     info('exp:{} Initializing gradients distribution ...'.format(expidx))
-    g = initialize_gradients(g, coords, graddist, gaussianstds)
+    g = initialize_gradients(g, coords, gaussianstd)
     info('exp:{} Exporting relief map...'.format(expidx))
 
     aux = pd.DataFrame()
@@ -452,7 +443,7 @@ k
     return g
 
 ##########################################################
-def initialize_gradients(g, coords, method='peak', sigma=1):
+def initialize_gradients(g, coords, sigma=1):
     """Initialize gradients with some distribution
 
     Args:
@@ -463,15 +454,15 @@ def initialize_gradients(g, coords, method='peak', sigma=1):
     """
 
 
-    if method == 'uniform':
-        g.vs['gradient'] = 0.1
-        return g
-    if method == 'peak':
-        return initialize_gradients_peak(g)
-    elif method == 'gaussian':
-        mu = (np.max(coords, 0) + np.min(coords, 0)) / 2
-        cov = np.eye(2) * sigma
-        return initialize_gradients_gaussian(g, coords, mu, cov)
+    # if method == 'uniform':
+        # g.vs['gradient'] = 0.1
+        # return g
+    # if method == 'peak':
+        # return initialize_gradients_peak(g)
+    # elif method == 'gaussian':
+    mu = (np.max(coords, 0) + np.min(coords, 0)) / 2
+    cov = np.eye(2) * sigma
+    return initialize_gradients_gaussian(g, coords, mu, cov)
 
 def step_mobility(g, particles, autoloop_prob):
     """Give a step in the mobility dynamic
@@ -631,6 +622,43 @@ def random_string(length=8):
     letters = np.array(list(string.ascii_lowercase + string.digits))
     return ''.join(np.random.choice(letters, size=length))
 
+def generate_params_combinations(origcfg):
+    cfg = origcfg.copy()
+    cfg.lathoroidal = [-1]
+    cfg.baoutpref = [-1]
+    cfg.wsrewiring = [-1]
+
+    params = []
+    if 'la' in cfg.topologymodel:
+        aux = cfg.copy()
+        aux.topologymodel = ['la']
+        aux.lathoroidal = origcfg.lathoroidal
+        aux.avgdegree = [4]
+        print(len(list(product(*aux))))
+        params += list(product(*aux))
+
+    if 'er' in cfg.topologymodel:
+        aux = cfg.copy()
+        aux.topologymodel = ['er']
+        print(len(list(product(*aux))))
+        print((list(product(*aux))))
+        params += list(product(*aux))
+
+    if 'ba' in cfg.topologymodel:
+        aux = cfg.copy()
+        aux.topologymodel = ['ba']
+        aux['baoutpref'] = origcfg.baoutpref
+        print(len(list(product(*aux))))
+        params += list(product(*aux))
+
+    if 'ws' in cfg.topologymodel:
+        aux = cfg.copy()
+        aux.topologymodel = ['ws']
+        aux['wsrewiring'] = origcfg.wsrewiring
+        print(len(list(product(*aux))))
+        params += list(product(*aux))
+
+    return params
 ##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -666,7 +694,7 @@ def main():
         df = pd.read_csv(expspath)
         params = df.to_dict(orient='records')
     else:
-        aux = list(product(*cfg))
+        aux = generate_params_combinations(cfg)
         params = []
         fh = open(expspath, 'w')
         colnames = ['expidx'] + (list(cfg.index)) + ['hostname']
