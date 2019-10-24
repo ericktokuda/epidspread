@@ -112,21 +112,16 @@ def plot_sir_all(resdir, outdir, nseeds=3):
     expspath = pjoin(resdir, 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
 
-    # print(df.shape[0])
     import matplotlib.pyplot as plt
     plotrows = int(df.shape[0]/nseeds)
-    fig, ax = plt.subplots(plotrows, nseeds, figsize=(10,150))
-    # fig.tight_layout() # Or equivalently,  "plt.tight_layout()"
-    # plt.subplots_adjust(hspace=1.0, wspace=0.4)
+    fig, ax = plt.subplots(plotrows, nseeds, figsize=(8, plotrows*2))
 
     mycols = list(df.columns)
     mycols.remove('randomseed')
     mycols.remove('hostname')
     df_sorted = df.sort_values(mycols)
-    # print(ax)
-    # input(len(ax))
+    plt.tight_layout(pad=2.5, h_pad=3.0, w_pad=0.5)
 
-    # for expidx in os.listdir(outdir):
     for j, expidx in enumerate(df_sorted.index):
         if not os.path.isdir(pjoin(resdir, expidx)): continue
         summarypath = pjoin(resdir, expidx, 'sir.csv')
@@ -143,8 +138,7 @@ def plot_sir_all(resdir, outdir, nseeds=3):
             format(v.topologymodel, v.avgdegree, v.lathoroidal, v.beta, v.gamma,
                    v.gaussianstd)
         ax[row, col].set_title(title, fontsize='small')
-    plt.savefig('/tmp/out.pdf')
-
+    plt.savefig(pjoin(outdir, 'sir_all.pdf'))
 
 ##########################################################
 def main():
