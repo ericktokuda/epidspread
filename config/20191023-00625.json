@@ -1,0 +1,21 @@
+{
+        "outdir" : ["/tmp/foo"], 
+        "nvertices" : [625],
+        "avgdegree" : [4,16,64],
+        "topologymodel" : ["la","er","ba"],
+        "lathoroidal" : [true,false],
+        "baoutpref" : [-1],  
+        "wsrewiring" : [-1], 
+        "nepochs" : [-1],
+        "s0" : [0.98],
+        "i0" : [0.02],
+        "r0" : [0.0],
+        "beta" :  [0.25,0.75],
+        "gamma" :  [0.25,0.75],
+        "ngaussians" : [1],
+        "gaussianstd" : [0.25,0.75],
+        "plotzoom" : [1],
+        "plotrate" : [0],
+        "nprocs" : [4],
+        "randomseed": [0,1,2]
+}
