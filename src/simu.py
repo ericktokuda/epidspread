@@ -694,7 +694,7 @@ def main():
         aux = generate_params_combinations(cfg)
         params = []
         fh = open(expspath, 'w')
-        colnames = ['expidx'] + (list(cfg.index)) + ['hostname']
+        colnames = ['expidx'] + (list(cfg.index))
         fh.write(','.join(colnames) + '\n')
 
         hashsz = 8
@@ -712,7 +712,6 @@ def main():
             param['expidx'] = hash
             params.append(param)
             pstr = [str(x) for x in [hash] + list(aux[i])]
-            pstr += [hostname]
             fh.write(','.join(pstr) + '\n')
         fh.close()
 
