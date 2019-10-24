@@ -19,6 +19,7 @@ import plotly.graph_objects as go
 from ipywidgets import widgets
 import plotly.express as px
 
+##########################################################
 def read_niterations(outdir):
     """Read number of iterations for in each folder in @outdir
 
@@ -38,9 +39,11 @@ def read_niterations(outdir):
 
     return counts
 
+##########################################################
 def get_inverse_map(mydict):
     return {v: k for k, v in mydict.items()}
 
+##########################################################
 def remap_to_categorical_data(df, cols):
     tickslabels = {}
     for col in cols:
@@ -51,6 +54,7 @@ def remap_to_categorical_data(df, cols):
         df[col] = df[col].map(aux)
     return df, tickslabels
 
+##########################################################
 def plot_parallel_coordinates(expsdf, colslabels, categcols, tickslabels, outdir):
 
     dimensions = []
@@ -76,6 +80,73 @@ def plot_parallel_coordinates(expsdf, colslabels, categcols, tickslabels, outdir
     plotpath = pjoin(outdir, 'parallel.html')
     plotly.offline.plot(fig, filename=plotpath, auto_open=False)
 
+##########################################################
+def plot_parallel(resdir, outdir):
+    dfs = []
+    for i, resdir in enumerate(resdir):
+        expspath = pjoin(resdir, 'exps.csv')
+        df = pd.read_csv(expspath, index_col='expidx')
+        niterations = read_niterations(resdir)
+        niterations = pd.Series(niterations, index=df.index, dtype=int)
+        df['t'] = niterations
+        dfs.append(df)
+
+    df = pd.concat(dfs)
+    colslabels = dict(topologymodel = 'topology',
+                      lathoroidal = 'lattice-thoroidal',
+                      beta = 'beta',
+                      gamma = 'gamma',
+                      gaussianstd = 'gradients dispersion',
+                      t = 'convergence time',
+                      )
+    df = df[colslabels.keys()]
+    categcols = list(colslabels.keys())
+    categcols.remove('t')
+    expsdf, tickslabels = remap_to_categorical_data(df, categcols)
+    plot_parallel_coordinates(expsdf, colslabels, categcols, tickslabels, outdir)
+
+##########################################################
+def plot_sir_all(resdir, outdir, nseeds=3):
+
+    resdir = resdir[0]
+    expspath = pjoin(resdir, 'exps.csv')
+    df = pd.read_csv(expspath, index_col='expidx')
+
+    # print(df.shape[0])
+    import matplotlib.pyplot as plt
+    plotrows = int(df.shape[0]/nseeds)
+    fig, ax = plt.subplots(plotrows, nseeds, figsize=(10,150))
+    # fig.tight_layout() # Or equivalently,  "plt.tight_layout()"
+    # plt.subplots_adjust(hspace=1.0, wspace=0.4)
+
+    mycols = list(df.columns)
+    mycols.remove('randomseed')
+    mycols.remove('hostname')
+    df_sorted = df.sort_values(mycols)
+    # print(ax)
+    # input(len(ax))
+
+    # for expidx in os.listdir(outdir):
+    for j, expidx in enumerate(df_sorted.index):
+        if not os.path.isdir(pjoin(resdir, expidx)): continue
+        summarypath = pjoin(resdir, expidx, 'sir.csv')
+        aux = pd.read_csv(summarypath)
+        row = j//nseeds
+        col = j%nseeds
+        ax[row, col].plot(aux.t, aux.S, label='S')
+        ax[row, col].plot(aux.t, aux.I, label='I')
+        ax[row, col].plot(aux.t, aux.R, label='R')
+        ax[row, col].legend(fontsize='small')
+        ax[row, col].set_xlim(0, 500)
+        v = df_sorted.loc[expidx]
+        title = 'topol:{},avgdegree:{},latt-thorus:{},\nbeta:{},gamma:{},gradspread:{}'. \
+            format(v.topologymodel, v.avgdegree, v.lathoroidal, v.beta, v.gamma,
+                   v.gaussianstd)
+        ax[row, col].set_title(title, fontsize='small')
+    plt.savefig('/tmp/out.pdf')
+
+
+##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('resdir', nargs='+',
@@ -86,39 +157,8 @@ def main():
                         datefmt='%Y%m%d %H:%M', level=logging.DEBUG)
 
     outdir = '/tmp'
-
-    # topologymap = {'erdos': 0, 'lattice': 1}
-    topologynames = sorted(['erdos', 'lattice'])
-    layoutnames = sorted(['grid', 'fr', 'kk'])
-    erdosavgdegrnames = ['DotNotApply', '1', '4', '10', 'Fully']
-    # layoutmap = {'fr': 0, 'grid': 1, 'kk': 2}
-
-    dfs = []
-    for i, resdir in enumerate(args.resdir):
-        expspath = pjoin(resdir, 'exps.csv')
-        df = pd.read_csv(expspath, index_col='expidx')
-        niterations = read_niterations(resdir)
-        niterations = pd.Series(niterations, index=df.index, dtype=int)
-        df['t'] = niterations
-        # df['topologymodel'] = df.topologymodel.map(topologymap)
-        # df['layoutmodel'] = df.layoutmodel.map(layoutmap)
-        dfs.append(df)
-
-    df = pd.concat(dfs)
-    colslabels = {'topologymodel': 'topology',
-                'layoutmodel': 'spatiality',
-                'erdosavgdegree': 'erdos-avgdegr',
-                'latticethoroidal': 'lattice-thoroidal',
-                'beta': 'beta',
-                'gamma': 'gamma',
-                'gaussianstds': 'gradients dispersion',
-                't': 'convergence time',
-                }
-    df = df[colslabels.keys()]
-    categcols = list(colslabels.keys())
-    categcols.remove('t')
-    expsdf, tickslabels = remap_to_categorical_data(df, categcols)
-    plot_parallel_coordinates(expsdf, colslabels, categcols, tickslabels, outdir)
+    # plot_parallel(args.resdir, outdir)
+    plot_sir_all(args.resdir, outdir)
 
 if __name__ == "__main__":
     main()
