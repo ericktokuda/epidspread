@@ -169,6 +169,7 @@ def run_experiment(cfg):
     latticethoroidal = cfg['lathoroidal']
     baoutpref = cfg['baoutpref']
     wsrewiring = cfg['wsrewiring']
+    mobilityratio   = cfg['mobilityratio']
     nepochs   = cfg['nepochs']
     nagents = 2*nvertices
     s0        = int(nagents*cfg['s0'])
@@ -189,9 +190,9 @@ def run_experiment(cfg):
 
     ########################################################## 
     outdir = pjoin(outdir, expidx)
-    summarypath = pjoin(outdir, 'sir.csv')
-    elapsedpath = pjoin(outdir, 'elapsed.csv')
-    if os.path.exists(summarypath): return
+    transmpath = pjoin(outdir, 'sir.csv')
+    summarypath = pjoin(outdir, 'summary.csv')
+    if os.path.exists(transmpath): return
     os.makedirs(outdir, exist_ok=True) # Create outdir
 
     ##########################################################
@@ -299,12 +300,18 @@ def run_experiment(cfg):
                           outdir)
 
     maxepoch = nepochs if nepochs > 0 else MAX
+    steps_mobility = 0
 
     for ep in range(maxepoch):
         lastepoch = ep
         if ep % 10 == 0:
             info('exp:{}, t:{}'.format(expidx, ep))
-        particles = step_mobility(g, particles, autoloop_prob)
+
+        if np.random.random() < mobilityratio:
+            particles = step_mobility(g, particles, autoloop_prob)
+            steps_mobility += 1
+            continue
+
         nparticlesstds[ep] = np.std([len(x) for x in particles])
         status, newtransmissions = step_transmission(g, status, beta, gamma, particles)
         ntransmissions += newtransmissions
@@ -342,7 +349,7 @@ def run_experiment(cfg):
         'R': statuscountsum[:, 2],
         'nparticlesstd': nparticlesstds
     })
-    outdf.to_csv(summarypath, index=True, index_label='t')
+    outdf.to_csv(transmpath, index=True, index_label='t')
 
     ########################################################## Plot SIR over time
     info('exp:{} Generating plots for counts of S, I, R'.format(expidx))
@@ -352,7 +359,18 @@ def run_experiment(cfg):
 
     elapsed = time.time() - t0
     info('exp:{} Elapsed time: {:.2f}h'.format(expidx, elapsed/3600))
-    with open(elapsedpath, 'w') as fh: fh.write(str(elapsed))
+    summary = dict(
+        elapsed = str(elapsed),
+        nsteps = lastepoch,
+        stepsmobility = steps_mobility,
+    )
+    print(elapsed)
+    with open(summarypath, 'w') as fh:
+        fh.write(','.join(summary.keys()) + '\n')
+        fh.write(','.join(str(x) for x in summary.values()))
+    # summarydf = pd.DataFrame(summary)
+    # with open(elapsedpath, 'w') as fh: fh.write(str(elapsed))
+    # summarydf.to_csv(summarypath)
     info('exp:{} Finished. Results are in {}'.format(expidx, outdir))
 
 ########################################################## Plot SIR over time
