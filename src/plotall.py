@@ -134,11 +134,73 @@ def plot_sir_all(resdir, outdir, nseeds=3):
         ax[row, col].legend(fontsize='small')
         ax[row, col].set_xlim(0, 500)
         v = df_sorted.loc[expidx]
+
+        maxI = np.max(aux.I)
+        argmaxI = np.where(aux.I == np.amax(aux.I))
+
         title = 'topol:{},avgdegree:{},latt-thorus:{},\nbeta:{},gamma:{},gradspread:{}'. \
             format(v.topologymodel, v.avgdegree, v.lathoroidal, v.beta, v.gamma,
                    v.gaussianstd)
         ax[row, col].set_title(title, fontsize='small')
     plt.savefig(pjoin(outdir, 'sir_all.pdf'))
+
+##########################################################
+def plot_measures_luc(resdir, outdir, nseeds=3):
+    resdir = resdir[0]
+    expspath = pjoin(resdir, 'exps.csv')
+    df = pd.read_csv(expspath, index_col='expidx')
+
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(1, 6, figsize=(30, 5))
+
+    mycols = list(df.columns)
+    mycols.remove('randomseed')
+    mycols.remove('hostname')
+    df_sorted = df.sort_values(mycols)
+    plt.tight_layout(pad=2.5, h_pad=3.0, w_pad=0.5)
+
+    nrows = df_sorted.shape[0]
+    IminusS = np.ndarray(nrows, dtype=int)
+    IminusR = np.ndarray(nrows, dtype=int)
+    maxI = np.ndarray(nrows, dtype=int)
+    argmaxI = np.ndarray(nrows, dtype=int)
+    maxdiffI = np.ndarray(nrows, dtype=int)
+    argmaxdiffI = np.ndarray(nrows, dtype=int)
+
+    for j, expidx in enumerate(df_sorted.index):
+        if not os.path.isdir(pjoin(resdir, expidx)): continue
+        summarypath = pjoin(resdir, expidx, 'sir.csv')
+        aux = pd.read_csv(summarypath)
+
+        aux2 = aux.I - aux.S
+        aux2 = aux2[aux2 > 0]
+        IminusS[j] = np.sum(aux2)
+
+        aux2 = aux.I - aux.R
+        aux2 = aux2[aux2 > 0]
+        IminusR[j] = np.sum(aux2)
+
+        maxI[j] = np.max(aux.I)
+        argmaxI[j] = np.where(aux.I == maxI[j])[0][0]
+
+        aux2 = aux.I[1:].to_numpy()-aux.I[:-1].to_numpy()
+        maxdiffI[j] = np.max(aux2)
+        argmaxdiffI[j] = np.where(aux2 == maxdiffI[j])[0][0]
+
+    ax[0].hist(IminusS)
+    ax[0].set_title('I-S (positive)')
+    ax[1].hist(IminusR)
+    ax[1].set_title('I-R (positive)')
+    ax[2].hist(maxI)
+    ax[2].set_title('Max I')
+    ax[3].hist(argmaxI)
+    ax[3].set_title('Mode I')
+    ax[4].hist(maxdiffI)
+    ax[4].set_title('Maximum diff I')
+    ax[5].hist(argmaxdiffI)
+    ax[5].set_title('Mode of diff I')
+
+    plt.savefig(pjoin(outdir, 'measures_luc.pdf'))
 
 ##########################################################
 def main():
@@ -152,7 +214,8 @@ def main():
 
     outdir = '/tmp'
     # plot_parallel(args.resdir, outdir)
-    plot_sir_all(args.resdir, outdir)
+    # plot_sir_all(args.resdir, outdir)
+    plot_measures_luc(args.resdir, outdir)
 
 if __name__ == "__main__":
     main()
