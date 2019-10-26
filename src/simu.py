@@ -504,6 +504,9 @@ def step_mobility(g, particles, autoloop_prob):
     for i, _ in enumerate(g.vs): # For each vertex
         numvparticles = len(particles_fixed[i])
         neighids = g.neighbors(i)
+        if neighids == []: continue
+        neighids = neighids + [i]
+
         n = len(neighids)
         gradients = g.vs[neighids]['gradient']
 
@@ -513,9 +516,6 @@ def step_mobility(g, particles, autoloop_prob):
             gradients /= np.sum(gradients)
 
         for j, partic in enumerate(particles_fixed[i]): # For each particle in this vertex
-            if np.random.rand() <= autoloop_prob: continue
-            if neighids == []: continue
-
             # neighid = np.random.choice(neighids, p=gradients) # slow
             neighid = fast_random_choice(neighids, gradients)
 
