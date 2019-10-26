@@ -190,7 +190,7 @@ def run_experiment(cfg):
 
     ########################################################## 
     outdir = pjoin(outdir, expidx)
-    transmpath = pjoin(outdir, 'sir.csv')
+    transmpath = pjoin(outdir, 'transmcount.csv')
     summarypath = pjoin(outdir, 'summary.csv')
     if os.path.exists(transmpath): return
     os.makedirs(outdir, exist_ok=True) # Create outdir
@@ -198,8 +198,6 @@ def run_experiment(cfg):
     ##########################################################
     info('exp:{} Copying config file ...'.format(expidx))
     kk = cfgdf['data']
-    # for k in kk.keys():
-        # kk[k] = [kk[k]]
 
     for k in cfgdf['data'].keys():
         cfgdf['data'][k] = [cfgdf['data'][k]]
@@ -225,6 +223,7 @@ def run_experiment(cfg):
 
     statuscountsum = np.zeros((MAXITERS, 3), dtype=int)
     statuscountsum[0, :] = np.array([s0, i0, r0])
+    transmstep = np.ones(MAXITERS, dtype=bool)
 
 
     # TODO: fix message
@@ -301,6 +300,7 @@ def run_experiment(cfg):
 
     maxepoch = nepochs if nepochs > 0 else MAX
     steps_mobility = 0
+    transmstep[0] = False
 
     for ep in range(1, maxepoch):
         lastepoch = ep
@@ -311,6 +311,7 @@ def run_experiment(cfg):
             particles = step_mobility(g, particles, autoloop_prob)
             steps_mobility += 1
             statuscountsum[ep, :] = statuscountsum[ep-1, :]
+            transmstep[ep] = False
             continue
 
         nparticlesstds[ep] = np.std([len(x) for x in particles])
@@ -337,6 +338,7 @@ def run_experiment(cfg):
         print(stderr)
 
     statuscountsum = statuscountsum[:lastepoch+1, :]
+    transmstep = transmstep[:lastepoch+1]
     nparticlesstds = nparticlesstds[:lastepoch+1]
     ########################################################## Export to csv
     info('exp:{} Exporting transmissions locations...'.format(expidx))
@@ -345,6 +347,7 @@ def run_experiment(cfg):
     ########################################################## Export to csv
     info('exp:{} Exporting S, I, R data'.format(expidx))
     outdf = pd.DataFrame({
+        'transmstep': transmstep.astype(int),
         'S': statuscountsum[:, 0],
         'I': statuscountsum[:, 1],
         'R': statuscountsum[:, 2],
