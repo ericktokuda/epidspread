@@ -224,7 +224,7 @@ def run_experiment(cfg):
 
 
     statuscountsum = np.zeros((MAXITERS, 3), dtype=int)
-    statuscountsum[0, :] = np.array([cfg['s0'], cfg['i0'], cfg['r0']])
+    statuscountsum[0, :] = np.array([s0, i0, r0])
 
 
     # TODO: fix message
@@ -302,7 +302,7 @@ def run_experiment(cfg):
     maxepoch = nepochs if nepochs > 0 else MAX
     steps_mobility = 0
 
-    for ep in range(maxepoch):
+    for ep in range(1, maxepoch):
         lastepoch = ep
         if ep % 10 == 0:
             info('exp:{}, t:{}'.format(expidx, ep))
@@ -310,6 +310,7 @@ def run_experiment(cfg):
         if np.random.random() < mobilityratio:
             particles = step_mobility(g, particles, autoloop_prob)
             steps_mobility += 1
+            statuscountsum[ep, :] = statuscountsum[ep-1, :]
             continue
 
         nparticlesstds[ep] = np.std([len(x) for x in particles])
