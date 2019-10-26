@@ -517,10 +517,11 @@ def step_mobility(g, particles, autoloop_prob):
 
         for j, partic in enumerate(particles_fixed[i]): # For each particle in this vertex
             # neighid = np.random.choice(neighids, p=gradients) # slow
-            neighid = fast_random_choice(neighids, gradients)
+            destv = fast_random_choice(neighids, gradients)
+            if destv == i: continue
 
             particles[i].remove(partic)
-            particles[neighid].append(partic)
+            particles[destv].append(partic)
     return particles
 
 ##########################################################
