@@ -723,10 +723,10 @@ def main():
         hashsz = 8
         hashes = []
         hostname = socket.gethostname()
-        fixedchars = hostname[:2]
+        # fixedchars = hostname[:2]
         for i in range(len(aux)):
             while True:
-                hash = fixedchars + random_string(hashsz - 2)
+                hash = random_string(hashsz)
                 if hash not in hashes: break
             hashes.append(hash)
             param = {}
