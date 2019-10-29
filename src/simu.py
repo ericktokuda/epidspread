@@ -25,6 +25,7 @@ from subprocess import Popen, PIPE
 from datetime import datetime
 from multiprocessing import Pool
 import pickle as pkl
+# import torch
 
 
 ########################################################## Defines
@@ -70,8 +71,8 @@ def get_4connected_neighbours_2d(i, j, n, thoroidal=False):
 
     return np.array(inds)
 
-def fast_random_choice(lst, probs):
-    return lst[np.searchsorted(probs.cumsum(), np.random.rand())]
+def fast_random_choice(lst, probs, randnum):
+    return lst[np.searchsorted(probs.cumsum(), randnum)]
 
 def random_choice_prob_index(a, axis=1):
     r = np.expand_dims(np.random.rand(a.shape[1-axis]), axis=axis)
@@ -308,7 +309,7 @@ def run_experiment(cfg):
             info('exp:{}, t:{}'.format(expidx, ep))
 
         if np.random.random() < mobilityratio:
-            particles = step_mobility(g, particles, autoloop_prob)
+            particles = step_mobility(g, particles, nagents, autoloop_prob)
             steps_mobility += 1
             statuscountsum[ep, :] = statuscountsum[ep-1, :]
             transmstep[ep] = False
@@ -488,7 +489,7 @@ def initialize_gradients(g, coords, sigma=1):
     cov = np.eye(2) * sigma
     return initialize_gradients_gaussian(g, coords, mu, cov)
 
-def step_mobility(g, particles, autoloop_prob):
+def step_mobility(g, particles, nagents, autoloop_prob):
     """Give a step in the mobility dynamic
 
     Args:
@@ -501,6 +502,9 @@ def step_mobility(g, particles, autoloop_prob):
     """
     particles_fixed = copy.deepcopy(particles) # copy to avoid being altered
 
+    randnum = np.random.rand(nagents)
+    # randnum = torch.rand((nagents,))
+    acc = 0
     for i, _ in enumerate(g.vs): # For each vertex
         numvparticles = len(particles_fixed[i])
         neighids = g.neighbors(i)
@@ -517,7 +521,8 @@ def step_mobility(g, particles, autoloop_prob):
 
         for j, partic in enumerate(particles_fixed[i]): # For each particle in this vertex
             # neighid = np.random.choice(neighids, p=gradients) # slow
-            destv = fast_random_choice(neighids, gradients)
+            destv = fast_random_choice(neighids, gradients, randnum[acc])
+            acc += 1
             if destv == i: continue
 
             particles[i].remove(partic)
@@ -555,6 +560,8 @@ def step_transmission(g, status, beta, gamma, particles):
 
         x  = np.random.rand(nsusceptible*ninfected)
         y  = np.random.rand(ninfected)
+        # x  = torch.rand((nsusceptible*ninfected,)).numpy()
+        # y  = torch.rand((ninfected,)).numpy()
         numnewinfected = np.sum(x <= beta)
         numnewrecovered = np.sum(y <= gamma)
         if numnewinfected > nsusceptible: numnewinfected = nsusceptible
