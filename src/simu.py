@@ -186,9 +186,6 @@ def run_experiment(cfg):
     randomseed= cfg['randomseed']
     expidx= cfg['expidx']
 
-    # TODO: fix it according to the gaussian
-    autoloop_prob = 0.5
-
     ########################################################## 
     outdir = pjoin(outdir, expidx)
     transmpath = pjoin(outdir, 'transmcount.csv')
@@ -309,7 +306,7 @@ def run_experiment(cfg):
             info('exp:{}, t:{}'.format(expidx, ep))
 
         if np.random.random() < mobilityratio:
-            particles = step_mobility(g, particles, nagents, autoloop_prob)
+            particles = step_mobility(g, particles, nagents)
             steps_mobility += 1
             statuscountsum[ep, :] = statuscountsum[ep-1, :]
             transmstep[ep] = False
@@ -489,13 +486,12 @@ def initialize_gradients(g, coords, sigma=1):
     cov = np.eye(2) * sigma
     return initialize_gradients_gaussian(g, coords, mu, cov)
 
-def step_mobility(g, particles, nagents, autoloop_prob):
+def step_mobility(g, particles, nagents):
     """Give a step in the mobility dynamic
 
     Args:
     g(igraph.Graph): instance of a graph
     particles(list of list): the set of particle ids for each vertex
-    autoloop_prob(float): probability of staying in the same place
 
     Returns:
     list of list: indices of the particles in each vertex
