@@ -143,8 +143,7 @@ def generate_graph(topologymodel, nvertices, avgdegree,
         layout = g.layout('fr')
     elif topologymodel == 'ws':
         m = round(avgdegree/2)
-        if m == 0: m = 1
-        g = igraph.Graph.Watts_Strogatz(nvertices, m)
+        g = igraph.Graph.Watts_Strogatz(1, nvertices, m, wsrewiring)
         layout = g.layout('fr')
 
     aux = np.array(layout.coords)
