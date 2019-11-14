@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 import scipy
 import scipy.stats
+from sklearn.preprocessing import StandardScaler
+    # from numpy.linalg import eig
 
 import plotly
 import plotly.graph_objects as go
@@ -203,6 +205,56 @@ def plot_measures_luc(resdir, outdir, nseeds=3):
     plt.savefig(pjoin(outdir, 'measures_luc.pdf'))
 
 ##########################################################
+def plot_pca(resdir, outdir):
+    expspath = pjoin(resdir[0], 'exps.csv')
+    df = pd.read_csv(expspath, index_col='expidx')
+
+    # import matplotlib.pyplot as plt
+    # plotrows = int(df.shape[0]/nseeds)
+    # fig, ax = plt.subplots(plotrows, nseeds, figsize=(8, plotrows*2))
+
+    mycols = list(df.columns)
+    # mycols.remove('randomseed')
+    # mycols.remove('hostname')
+    df_sorted = df.sort_values(mycols)
+    # plt.tight_layout(pad=2.5, h_pad=3.0, w_pad=0.5)
+
+    for j, expidx in enumerate(df_sorted.index):
+        if not os.path.isdir(pjoin(resdir[0], expidx)): continue
+        summarypath = pjoin(resdir[0], expidx, 'sir.csv')
+        aux = pd.read_csv(summarypath)
+        nrows = aux.shape[0]
+
+        i_s = aux.I - aux.S
+        i_equal_s = np.where(i_s > 0)[0][0]
+
+        r_s = aux.R - aux.S
+        r_equal_s = np.where(r_s > 0)[0][0]
+
+        r_i = aux.R - aux.I
+        r_equal_i = np.where(r_i > 0)[0][0]
+
+        df_sorted.loc[expidx, 't'] = nrows
+        df_sorted.loc[expidx, 'iequals'] = i_equal_s
+        df_sorted.loc[expidx, 'requals'] = r_equal_s
+        df_sorted.loc[expidx, 'requali'] = r_equal_i
+
+    X = df_sorted[['avgdegree', 's0', 'i0', 'gaussianstd', 't', 'iequals', 'requals', 'requali']]
+    X = StandardScaler().fit_transform(X.astype(float))
+    n, m = X.shape
+    V = np.dot(X.T, X) / (n-1)
+    values, vectors = np.linalg.eig(V)
+    P = np.dot(X, vectors)
+    print(values)
+    print(np.sum(values[:1]/np.sum(values)))
+    print(np.sum(values[:2]/np.sum(values)))
+    # from sklearn.decomposition import PCA
+    # pca = PCA().fit(X)
+    # print(pca.explained_variance_)
+    # print(pca.explained_variance_ratio_)
+# fit on data
+    # print(P)
+##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('resdir', nargs='+',
@@ -215,7 +267,8 @@ def main():
     outdir = '/tmp'
     # plot_parallel(args.resdir, outdir)
     # plot_sir_all(args.resdir, outdir)
-    plot_measures_luc(args.resdir, outdir)
+    # plot_measures_luc(args.resdir, outdir)
+    plot_pca(args.resdir, outdir)
 
 if __name__ == "__main__":
     main()
