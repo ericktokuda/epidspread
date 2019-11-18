@@ -216,8 +216,25 @@ def plot_pca(resdir, outdir):
     mycols = list(df.columns)
     # mycols.remove('randomseed')
     # mycols.remove('hostname')
-    df_sorted = df.sort_values(mycols)
+    # df_sorted = df.sort_values(mycols)
+    # df[df['lathoroidal'] == 'True']['lathoroidal'] = 1
+    # input(df[df['lathoroidal'] == 'True'])
+    # input(df.lathoroidal)
+    # df[df['lathoroidal'] == 'False']['lathoroidal'] = 0
+    # input(df.lathoroidal)
+    # df[df['lathoroidal'] == '-1']['lathoroidal'] = -1
+    # input(df.lathoroidal)
+    # input(type(df.lathoroidal))
+
+    df_sorted = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
     # plt.tight_layout(pad=2.5, h_pad=3.0, w_pad=0.5)
+    # input(np.unique(df_sorted.gaussianstd))
+    # print('Filtering by avgdegree=16')
+    # df_sorted = df_sorted[df_sorted.avgdegree == 16]
+    print('Filtering by seed=0')
+    df_sorted = df_sorted[df_sorted.randomseed == 0]
+    print('Filtering by thoroidal=-1 or thoroidal=False')
+    df_sorted = df_sorted[(df_sorted.lathoroidal == '-1') | (df_sorted.lathoroidal == 'False')]
 
     for j, expidx in enumerate(df_sorted.index):
         if not os.path.isdir(pjoin(resdir[0], expidx)): continue
@@ -234,26 +251,99 @@ def plot_pca(resdir, outdir):
         r_i = aux.R - aux.I
         r_equal_i = np.where(r_i > 0)[0][0]
 
+        imax = np.max(aux.I)
+        imode = np.argmax(aux.I)
+
         df_sorted.loc[expidx, 't'] = nrows
         df_sorted.loc[expidx, 'iequals'] = i_equal_s
         df_sorted.loc[expidx, 'requals'] = r_equal_s
         df_sorted.loc[expidx, 'requali'] = r_equal_i
+        df_sorted.loc[expidx, 'imax'] = imax
+        df_sorted.loc[expidx, 'imode'] = imode
 
-    X = df_sorted[['avgdegree', 's0', 'i0', 'gaussianstd', 't', 'iequals', 'requals', 'requali']]
+    X_orig = df_sorted[['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree', 't', 'iequals', 'requals', 'requali', 'imax', 'imode']]
+    import copy
+    X = copy.copy(X_orig)
+    X['topologymodel'] = X_orig.topologymodel.map({'la':0, 'er':1, 'ba':2})
     X = StandardScaler().fit_transform(X.astype(float))
     n, m = X.shape
     V = np.dot(X.T, X) / (n-1)
-    values, vectors = np.linalg.eig(V)
+    values, vectors = np.linalg.eig(V) #non necessarily sorted
     P = np.dot(X, vectors)
-    print(values)
-    print(np.sum(values[:1]/np.sum(values)))
-    print(np.sum(values[:2]/np.sum(values)))
-    # from sklearn.decomposition import PCA
-    # pca = PCA().fit(X)
-    # print(pca.explained_variance_)
-    # print(pca.explained_variance_ratio_)
-# fit on data
-    # print(P)
+    inds = np.argsort(values)
+
+    from sklearn.decomposition import PCA
+    pca = PCA(n_components=2).fit(X)
+    Y = pca.transform(X)
+    print(pca.explained_variance_)
+    print(pca.explained_variance_ratio_)
+
+    import matplotlib.pyplot as plt
+    ##########################################################
+    fig, ax = plt.subplots(4,2, figsize=(20,40))
+    ax[0][0].scatter(Y[:, 0], Y[:, 1])
+    
+    for i, y in enumerate(Y):
+        x = X_orig.iloc[i]
+        txt = '{},{},{},{},{},{}'.format(x.topologymodel, x.gaussianstd,
+                int(x.t), int(x.iequals), int(x.requals), int(x.requali))
+        ax[0][0].annotate(txt, (y[0]+np.random.rand()*0.1, y[1]+np.random.rand()*0.1))
+    ax[0][0].set_title('topology, gaussianstd, T_converg, T(I=S), T(R=S), T(R=I)')
+
+    ##########################################################
+    mycmap = 'cividis'
+    myedgecolor = None
+
+    ##########################################################
+    # fig, ax = plt.subplots(1, figsize=(10,10))
+    c = X_orig.topologymodel.map({'la':0, 'er':1, 'ba':2}).values
+
+    ax[0][1].scatter(Y[X_orig.topologymodel == 'la'][:, 0], Y[X_orig.topologymodel == 'la'][:, 1], c='blue', label='Lattice')
+    ax[0][1].scatter(Y[X_orig.topologymodel == 'er'][:, 0], Y[X_orig.topologymodel == 'er'][:, 1], c='orange', label='ER')
+    ax[0][1].scatter(Y[X_orig.topologymodel == 'ba'][:, 0], Y[X_orig.topologymodel == 'ba'][:, 1], c='green', label='BA')
+    
+    ax[0][1].set_title('PCA colored by topology')
+    ax[0][1].legend(title='Topology')
+
+    ########################################################## gaussian std
+    aux = ax[1][0].scatter(Y[:, 0], Y[:, 1], c=X_orig.gaussianstd, cmap=mycmap, edgecolor=myedgecolor)
+    
+    # ax[1][1].set_title('PCA colored by T such that I=S')
+    ax[1][0].set_title('PCA colored by gaussian std')
+    fig.colorbar(aux, ax=ax[1][0])
+    # ax[1][0].legend(title='Gaussian std')
+
+    ########################################################## i equal s
+    aux = ax[1][1].scatter(Y[:, 0], Y[:, 1], c=X_orig.iequals, cmap=mycmap, edgecolor=myedgecolor)
+    
+    ax[1][1].set_title('PCA colored by T such that I=S')
+    fig.colorbar(aux, ax=ax[1][1])
+
+    ########################################################## r equal s
+    aux = ax[2][0].scatter(Y[:, 0], Y[:, 1], c=X_orig.requals, cmap=mycmap, edgecolor=myedgecolor)
+    
+    ax[2][0].set_title('PCA colored by T such that R=S')
+    fig.colorbar(aux, ax=ax[2][0])
+
+    ########################################################## r equal i
+    aux = ax[2][1].scatter(Y[:, 0], Y[:, 1], c=X_orig.requali, cmap=mycmap, edgecolor=myedgecolor)
+    
+    ax[2][1].set_title('PCA colored by T such that R=I')
+    fig.colorbar(aux, ax=ax[2][1])
+
+    ########################################################## I max
+    aux = ax[3][0].scatter(Y[:, 0], Y[:, 1], c=X_orig.imax, cmap=mycmap, edgecolor=myedgecolor)
+    ax[3][0].set_title('PCA colored by maximum value of I')
+    fig.colorbar(aux, ax=ax[3][0])
+
+    ########################################################## I mode
+    aux = ax[3][1].scatter(Y[:, 0], Y[:, 1], c=X_orig.imode, cmap=mycmap, edgecolor=myedgecolor)
+    ax[3][1].set_title('PCA colored by T when for maxI')
+    fig.colorbar(aux, ax=ax[3][1])
+
+    ##########################################################
+    plt.savefig('/tmp/plots.pdf')
+
 ##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
