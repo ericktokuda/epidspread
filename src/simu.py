@@ -501,20 +501,19 @@ def step_mobility(g, particles, nagents):
     # randnum = torch.rand((nagents,))
     acc = 0
     for i, _ in enumerate(g.vs): # For each vertex
-        numvparticles = len(particles_fixed[i])
         neighids = g.neighbors(i)
         if neighids == []: continue
-        neighids = neighids + [i]
+        neighids = neighids + [i] # Auto-loop
 
         n = len(neighids)
         gradients = g.vs[neighids]['gradient']
 
-        if np.sum(gradients) == 0:
+        if np.sum(gradients) == 0: # Transform into a prob. distribution
             gradients = np.ones(n) / n
         else:
             gradients /= np.sum(gradients)
 
-        for j, partic in enumerate(particles_fixed[i]): # For each particle in this vertex
+        for partic in particles_fixed[i]: # For each particle in this vertex
             # neighid = np.random.choice(neighids, p=gradients) # slow
             destv = fast_random_choice(neighids, gradients, randnum[acc])
             acc += 1
