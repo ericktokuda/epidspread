@@ -173,8 +173,8 @@ def run_experiment(cfg):
     nepochs   = cfg['nepochs']
     nagents = 2*nvertices
     s0        = int(nagents*cfg['s0'])
-    i0        = int(nagents*cfg['i0'])
     r0        = int(nagents*cfg['r0'])
+    i0        = nagents - s0 - r0 # To sum up #nagents
     beta      = cfg['beta']
     gamma     = cfg['gamma']
     ngaussians = cfg['ngaussians']
@@ -241,10 +241,10 @@ def run_experiment(cfg):
 
     ntransmissions = np.zeros(nvertices, dtype=int)
     ########################################################## Distrib. of particles
-    info('exp:{} Generating uniform distribution of agents in the lattice ...'.format(expidx))
+    info('exp:{} Generating uniform distribution of agents ...'.format(expidx))
     nparticles = np.ndarray(nvertices, dtype=int)
     aux = np.random.rand(nvertices) # Uniform distrib
-    nparticles = np.round(aux / (np.sum(aux)) *N).astype(int)
+    nparticles = np.floor(aux / np.sum(aux) *N).astype(int)
 
     diff = N - np.sum(nparticles) # Correct rounding differences on the final number
     for i in range(np.abs(diff)):
@@ -256,7 +256,6 @@ def run_experiment(cfg):
     for i in range(nvertices):
         particles[i] = list(range(aux, aux+nparticles[i]))
         aux += nparticles[i]
-    # nparticlesstds = [np.std([len(x) for x in particles])]
     nparticlesstds = np.zeros((MAXITERS,), dtype=float)
 
     ########################################################## Distrib. of gradients
@@ -306,6 +305,7 @@ def run_experiment(cfg):
 
         if np.random.random() < mobilityratio:
             particles = step_mobility(g, particles, nagents)
+
             steps_mobility += 1
             statuscountsum[ep, :] = statuscountsum[ep-1, :]
             transmstep[ep] = False
