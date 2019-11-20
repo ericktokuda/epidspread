@@ -20,6 +20,7 @@ import plotly
 import plotly.graph_objects as go
 from ipywidgets import widgets
 import plotly.express as px
+import subprocess
 
 ##########################################################
 def read_niterations(outdir):
@@ -33,11 +34,15 @@ def read_niterations(outdir):
     """
 
     counts = {}
+    # ninfected = {}
 
     for expidx in os.listdir(outdir):
         if not os.path.isdir(pjoin(outdir, expidx)): continue
-        summarypath = pjoin(outdir, expidx, 'sir.csv')
+        summarypath = pjoin(outdir, expidx, 'transmcount.csv')
         counts[expidx] = sum(1 for line in open(summarypath))
+        # lastline = subprocess.check_output(['tail', '-1', summarypath]).decode('utf-8')
+        # aux = lastline.split(',')[-2]
+        # ninfected[expidx] = int(aux)
 
     return counts
 
@@ -95,7 +100,10 @@ def plot_parallel(resdir, outdir):
 
     df = pd.concat(dfs)
     colslabels = dict(topologymodel = 'topology',
+                      avgdegree = 'avg.degree',
                       lathoroidal = 'lattice-thoroidal',
+                      wsrewiring = 'WS rew. prob.',
+                      mobilityratio = 'mob. ratio',
                       beta = 'beta',
                       gamma = 'gamma',
                       gaussianstd = 'gradients dispersion',
@@ -355,10 +363,10 @@ def main():
                         datefmt='%Y%m%d %H:%M', level=logging.DEBUG)
 
     outdir = '/tmp'
-    # plot_parallel(args.resdir, outdir)
+    plot_parallel(args.resdir, outdir)
     # plot_sir_all(args.resdir, outdir)
     # plot_measures_luc(args.resdir, outdir)
-    plot_pca(args.resdir, outdir)
+    # plot_pca(args.resdir, outdir)
 
 if __name__ == "__main__":
     main()
