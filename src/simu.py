@@ -26,6 +26,7 @@ from datetime import datetime
 from multiprocessing import Pool
 import pickle as pkl
 # import torch
+from optimized import step_mobility, step_transmission
 
 
 ########################################################## Defines
@@ -381,11 +382,16 @@ def visualize_static_graph_layouts(g, layoutspath, outdir, plotalpha=.9):
     for l in layouts:
         info(l)
         try:
-            igraph.plot(g, target=pjoin(outdir, l + '.png'), layout=g.layout(l),
+            igraph.plot(g, target=pjoin(outdir, l + '.png'),
+                        layout=g.layout(l),
+                        bbox=(1200,1200),
                         vertex_frame_width=0,
-                        vertex_color=[.5, .5, .5, plotalpha],
-                        vertex_label=list(range(g.vcount())))
-        except Exception:
+                        # vertex_color=[.5, .5, .5, plotalpha],
+                        vertex_color='gray',
+                        )
+                        # vertex_label=list(range(g.vcount())))
+        except Exception as e:
+            print('Error generating {}'.format(l))
             pass
 
 ########################################################## Distrib. of gradients
@@ -484,87 +490,6 @@ def initialize_gradients(g, coords, sigma=1):
     mu = (np.max(coords, 0) + np.min(coords, 0)) / 2
     cov = np.eye(2) * sigma
     return initialize_gradients_gaussian(g, coords, mu, cov)
-
-def step_mobility(g, particles, nagents):
-    """Give a step in the mobility dynamic
-
-    Args:
-    g(igraph.Graph): instance of a graph
-    particles(list of list): the set of particle ids for each vertex
-
-    Returns:
-    list of list: indices of the particles in each vertex
-    """
-    particles_fixed = copy.deepcopy(particles) # copy to avoid being altered
-
-    randnum = np.random.rand(nagents)
-    # randnum = torch.rand((nagents,))
-    acc = 0
-    for i, _ in enumerate(g.vs): # For each vertex
-        neighids = g.neighbors(i)
-        if neighids == []: continue
-        neighids = neighids + [i] # Auto-loop
-
-        n = len(neighids)
-        gradients = g.vs[neighids]['gradient']
-
-        if np.sum(gradients) == 0: # Transform into a prob. distribution
-            gradients = np.ones(n) / n
-        else:
-            gradients /= np.sum(gradients)
-
-        for partic in particles_fixed[i]: # For each particle in this vertex
-            # neighid = np.random.choice(neighids, p=gradients) # slow
-            destv = fast_random_choice(neighids, gradients, randnum[acc])
-            acc += 1
-            if destv == i: continue
-
-            particles[i].remove(partic)
-            particles[destv].append(partic)
-    return particles
-
-##########################################################
-def step_transmission(g, status, beta, gamma, particles):
-    """Give a step in the transmission dynamic
-
-    Args:
-    g(igraph.Graph): instance of a graph
-    status(list): statuses of each particle
-    beta(float): contagion chance
-    gamma(float): recovery chance
-    particles(list of list): the set of particle ids for each vertex
-
-    Returns:
-    list: updated statuses
-    """
-
-    statuses_fixed = copy.deepcopy(status)
-    ntransmissions = np.zeros((g.vcount()), dtype=int)
-
-    for i, _ in enumerate(g.vs):
-        statuses = statuses_fixed[particles[i]]
-        N = len(statuses)
-        nsusceptible = len(statuses[statuses==SUSCEPTIBLE])
-        ninfected = len(statuses[statuses==INFECTED])
-        nrecovered = len(statuses[statuses==RECOVERED])
-
-        indsusceptible = np.where(statuses_fixed==SUSCEPTIBLE)[0]
-        indinfected = np.where(statuses_fixed==INFECTED)[0]
-        indrecovered = np.where(statuses_fixed==RECOVERED)[0]
-
-        x  = np.random.rand(nsusceptible*ninfected)
-        y  = np.random.rand(ninfected)
-        # x  = torch.rand((nsusceptible*ninfected,)).numpy()
-        # y  = torch.rand((ninfected,)).numpy()
-        numnewinfected = np.sum(x <= beta)
-        numnewrecovered = np.sum(y <= gamma)
-        if numnewinfected > nsusceptible: numnewinfected = nsusceptible
-        if numnewrecovered > ninfected: numnewrecovered = ninfected
-
-        ntransmissions[i] = numnewinfected
-        status[indsusceptible[0:numnewinfected]] = INFECTED
-        status[indinfected[0:numnewrecovered]] = RECOVERED
-    return status, ntransmissions
 
 ##########################################################
 def compute_statuses_sums(status, particles, nvertices, nclasses=3):
