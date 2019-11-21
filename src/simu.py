@@ -611,7 +611,7 @@ def generate_params_combinations(origcfg):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('config', help='Config file')
-    parser.add_argument('--overwrite', action='store_true', help='Overwrite')
+    parser.add_argument('--continue_', action='store_true', help='Continue execution')
     parser.add_argument('--shuffle', action='store_true', help='Shuffled traversing of config parameters')
     parser.add_argument('--usedhashes', default=None, help='Already used hashes')
     args = parser.parse_args()
@@ -623,11 +623,11 @@ def main():
 
     outdir = cfg.outdir[0]
 
-    info('Files will be generated in {}/...'.format(outdir))
+    # info('Files will be generated in {}/...'.format(outdir))
     existing = os.path.exists(outdir)
 
-    if existing and not args.overwrite:
-        print('Folder {} exists. Change the outdir parameter or use --overwrite'. \
+    if existing and not args.continue_:
+        print('Folder {} exists. Change the outdir parameter or use --continue_'. \
               format(outdir))
         return
 
@@ -639,9 +639,11 @@ def main():
     cfgkeys = list(cfg.index)
 
     if existing and os.path.exists(expspath): # Load config from exps
+        info('Ignoring {}. Loading existing {}/exps.csv'.format(args.config, outdir))
         df = pd.read_csv(expspath)
         params = df.to_dict(orient='records')
     else:
+        info('Loading {}'.format(args.config))
         if args.usedhashes: hashes = open(args.usedhashes).read().splitlines()
         else: hashes = []
 
