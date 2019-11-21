@@ -612,6 +612,7 @@ def main():
     parser.add_argument('config', help='Config file')
     parser.add_argument('--overwrite', action='store_true', help='Overwrite')
     parser.add_argument('--shuffle', action='store_true', help='Shuffled traversing of config parameters')
+    parser.add_argument('--usedhashes', default=None, help='Already used hashes')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s] %(message)s',
@@ -640,6 +641,9 @@ def main():
         df = pd.read_csv(expspath)
         params = df.to_dict(orient='records')
     else:
+        if args.usedhashes: hashes = open(args.usedhashes).read().splitlines()
+        else: hashes = []
+
         aux = generate_params_combinations(cfg)
         params = []
         fh = open(expspath, 'w')
@@ -647,9 +651,6 @@ def main():
         fh.write(','.join(colnames) + '\n')
 
         hashsz = 8
-        hashes = []
-        hostname = socket.gethostname()
-        # fixedchars = hostname[:2]
         for i in range(len(aux)):
             while True:
                 hash = random_string(hashsz)
