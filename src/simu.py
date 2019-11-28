@@ -191,6 +191,7 @@ def run_experiment(cfg):
     transmpath = pjoin(outdir, 'transmcount.csv')
     summarypath = pjoin(outdir, 'summary.csv')
     if os.path.exists(transmpath): return
+    print(transmpath)
     os.makedirs(outdir, exist_ok=True) # Create outdir
 
     ##########################################################
@@ -339,7 +340,6 @@ def run_experiment(cfg):
     transmstep = transmstep[:lastepoch+1]
     nparticlesstds = nparticlesstds[:lastepoch+1]
     ########################################################## Export to csv
-    info('exp:{} Exporting transmissions locations...'.format(expidx))
     aux = pd.DataFrame(ntransmissions)
     aux.to_csv(pjoin(outdir, 'ntranmissions.csv'), index=False, header=['ntransmission'])
     ########################################################## Export to csv
@@ -367,7 +367,6 @@ def run_experiment(cfg):
         nsteps = lastepoch,
         stepsmobility = steps_mobility,
     )
-    print(elapsed)
     with open(summarypath, 'w') as fh:
         fh.write(','.join(summary.keys()) + '\n')
         fh.write(','.join(str(x) for x in summary.values()))
@@ -607,6 +606,67 @@ def generate_params_combinations(origcfg):
         params += list(product(*aux))
 
     return params
+
+def convert_list_to_df(mylist):
+    """short-description
+
+    Args:
+    mylist(list): list of rows
+
+    Returns:
+    pd.Dataframe: resulting dataframe
+    """
+
+    hashsz = 8
+    for i in range(len(mylist)):
+        while True:
+            hash = random_string(hashsz)
+            if hash not in hashes: break
+        hashes.append(hash)
+
+        param = {}
+        for j, key in enumerate(cfgkeys):
+            param[key] = mylist[i][j]
+        param['expidx'] = hash
+    return param
+        # params.append(param)
+        # pstr = [str(x) for x in [hash] + list(mylist[i])]
+        # fh.write(','.join(pstr) + '\n')
+
+def load_df_from_json(myjson):
+    """Load a pandas dataframe from a cfg file
+
+    Args:
+    cfg
+
+    Returns:
+    ret
+    """
+    aux = generate_params_combinations(myjson)
+    nrows = len(aux)
+    colnames = list(myjson.keys())
+    df = pd.DataFrame(index=np.arange(0, nrows), columns=colnames )
+
+    for i in np.arange(0, nrows):
+        df.loc[i] = aux[i]
+
+    return df
+
+def prepend_random_ids_columns(df):
+    n = df.shape[0]
+    hashsz = 8
+
+    hashes = []
+    for i in range(n):
+        while True:
+            hash = random_string(hashsz)
+            if hash not in hashes: break
+        hashes.append(hash)
+
+    df['expidx'] = hashes
+    cols = df.columns.tolist()
+    return df[['expidx'] + cols[:-1]]
+
 ##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -636,38 +696,27 @@ def main():
 
     expspath = pjoin(outdir, 'exps.csv')
 
-    cfgkeys = list(cfg.index)
+    configdf = load_df_from_json(cfg)
+    cols = configdf.columns.tolist()
+    configdf = prepend_random_ids_columns(configdf)
+    configdf.set_index('expidx')
 
-    if existing and os.path.exists(expspath): # Load config from exps
-        info('Ignoring {}. Loading existing {}/exps.csv'.format(args.config, outdir))
-        df = pd.read_csv(expspath)
-        params = df.to_dict(orient='records')
+    if os.path.exists(expspath):
+        aux2 = cols.copy()
+        loadeddf = pd.read_csv(expspath)
+        aux = pd.concat([loadeddf, configdf])
+        aux2.remove('outdir')
+        aux2.remove('nprocs')
+        expsdf = aux.drop_duplicates(aux2, keep='first')
+        expsdf = expsdf.assign(outdir = cfg.outdir[0])
+        expsdf = expsdf.assign(nprocs = cfg.nprocs[0])
+        os.rename(expspath, expspath.replace('exps.csv', 'exps_orig.csv'))
     else:
-        info('Loading {}'.format(args.config))
-        if args.usedhashes: hashes = open(args.usedhashes).read().splitlines()
-        else: hashes = []
+        expsdf = configdf
 
-        aux = generate_params_combinations(cfg)
-        params = []
-        fh = open(expspath, 'w')
-        colnames = ['expidx'] + (list(cfg.index))
-        fh.write(','.join(colnames) + '\n')
+    expsdf.to_csv(expspath, index=False)
 
-        hashsz = 8
-        for i in range(len(aux)):
-            while True:
-                hash = random_string(hashsz)
-                if hash not in hashes: break
-            hashes.append(hash)
-            param = {}
-            for j, key in enumerate(cfgkeys):
-                param[key] = aux[i][j]
-            param['expidx'] = hash
-            params.append(param)
-            pstr = [str(x) for x in [hash] + list(aux[i])]
-            fh.write(','.join(pstr) + '\n')
-        fh.close()
-
+    params = expsdf.to_dict(orient='records')
     if args.shuffle: np.random.shuffle(params)
 
     if cfg.nprocs[0] == 1:
@@ -676,5 +725,7 @@ def main():
         pool = Pool(cfg.nprocs[0])
         pool.map(run_one_experiment_given_list, params)
 
+
+##########################################################
 if __name__ == "__main__":
     main()
