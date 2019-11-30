@@ -191,7 +191,6 @@ def run_experiment(cfg):
     transmpath = pjoin(outdir, 'transmcount.csv')
     summarypath = pjoin(outdir, 'summary.csv')
     if os.path.exists(transmpath): return
-    print(transmpath)
     os.makedirs(outdir, exist_ok=True) # Create outdir
 
     ##########################################################
@@ -645,7 +644,7 @@ def load_df_from_json(myjson):
     aux = generate_params_combinations(myjson)
     nrows = len(aux)
     colnames = list(myjson.keys())
-    df = pd.DataFrame(index=np.arange(0, nrows), columns=colnames )
+    df = pd.DataFrame(index=np.arange(0, nrows), columns=colnames)
 
     for i in np.arange(0, nrows):
         df.loc[i] = aux[i]
@@ -701,10 +700,30 @@ def main():
     configdf = prepend_random_ids_columns(configdf)
     configdf.set_index('expidx')
 
+    # types_ = dict(
+        # nvertices=int,
+        # avgdegree=int,
+        # lathoroidal=int,
+        # baoutpref=int,
+        # wsrewiring=float,
+        # nepochs=int,
+        # mobilityratio=float,
+        # s0=float,
+        # i0=float,
+        # r0=float,
+        # beta=float,
+        # gamma=float,
+        # ngaussians=int,
+        # gaussianstd=float,
+        # plotzoom=int,
+        # plotrate=int,
+        # randomseed=int
+    # )
+
     if os.path.exists(expspath):
         aux2 = cols.copy()
         loadeddf = pd.read_csv(expspath)
-        aux = pd.concat([loadeddf, configdf])
+        aux = pd.concat([loadeddf, configdf], sort=False)
         aux2.remove('outdir')
         aux2.remove('nprocs')
         expsdf = aux.drop_duplicates(aux2, keep='first')
@@ -714,7 +733,7 @@ def main():
     else:
         expsdf = configdf
 
-    expsdf.to_csv(expspath, index=False)
+    expsdf.drop(columns=['outdir', 'nprocs']).to_csv(expspath, index=False)
 
     params = expsdf.to_dict(orient='records')
     if args.shuffle: np.random.shuffle(params)
