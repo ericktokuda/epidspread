@@ -720,18 +720,20 @@ def main():
         # randomseed=int
     # )
 
+    expsdf = configdf
     if os.path.exists(expspath):
-        aux2 = cols.copy()
-        loadeddf = pd.read_csv(expspath)
-        aux = pd.concat([loadeddf, configdf], sort=False)
-        aux2.remove('outdir')
-        aux2.remove('nprocs')
-        expsdf = aux.drop_duplicates(aux2, keep='first')
-        expsdf = expsdf.assign(outdir = cfg.outdir[0])
-        expsdf = expsdf.assign(nprocs = cfg.nprocs[0])
-        os.rename(expspath, expspath.replace('exps.csv', 'exps_orig.csv'))
-    else:
-        expsdf = configdf
+        try:
+            aux2 = cols.copy()
+            loadeddf = pd.read_csv(expspath)
+            aux = pd.concat([loadeddf, configdf], sort=False)
+            aux2.remove('outdir')
+            aux2.remove('nprocs')
+            expsdf = aux.drop_duplicates(aux2, keep='first')
+            expsdf = expsdf.assign(outdir = cfg.outdir[0])
+            expsdf = expsdf.assign(nprocs = cfg.nprocs[0])
+            os.rename(expspath, expspath.replace('exps.csv', 'exps_orig.csv'))
+        except:
+            expsdf = configdf
 
     expsdf.drop(columns=['outdir', 'nprocs']).to_csv(expspath, index=False)
 
