@@ -743,6 +743,7 @@ def main():
     if cfg.nprocs[0] == 1:
         [ run_one_experiment_given_list(p) for p in params ]
     else:
+        info('Running in parallel ({})'.format(cfg.nprocs[0]))
         pool = Pool(cfg.nprocs[0])
         pool.map(run_one_experiment_given_list, params)
 
