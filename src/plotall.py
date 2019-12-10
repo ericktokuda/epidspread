@@ -14,6 +14,7 @@ import pandas as pd
 import scipy
 import scipy.stats
 from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
     # from numpy.linalg import eig
 
 import plotly
@@ -122,7 +123,6 @@ def plot_sir_all(resdir, outdir, nseeds=3):
     expspath = pjoin(resdir, 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
 
-    import matplotlib.pyplot as plt
     plotrows = int(df.shape[0]/nseeds)
     fig, ax = plt.subplots(plotrows, nseeds, figsize=(8, plotrows*2))
 
@@ -160,7 +160,6 @@ def plot_measures_luc(resdir, outdir, nseeds=3):
     expspath = pjoin(resdir, 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
 
-    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(1, 6, figsize=(30, 5))
 
     mycols = list(df.columns)
@@ -241,26 +240,33 @@ def plot_pca(resdir, outdir):
     # df_sorted = df_sorted[df_sorted.avgdegree == 16]
     print('Filtering by seed=0')
     df_sorted = df_sorted[df_sorted.randomseed == 0]
-    print('Filtering by thoroidal=-1 or thoroidal=False')
-    df_sorted = df_sorted[(df_sorted.lathoroidal == '-1') | (df_sorted.lathoroidal == 'False')]
+    print('Filtering by thoroidal=-1 or thoroidal=0')
+    df_sorted = df_sorted[(df_sorted.lathoroidal == -1) | (df_sorted.lathoroidal == 0)]
+    print('Filtering by gamma=0.75')
+    df_sorted = df_sorted[(df_sorted.gamma == 0.75)]
 
     for j, expidx in enumerate(df_sorted.index):
         if not os.path.isdir(pjoin(resdir[0], expidx)): continue
-        summarypath = pjoin(resdir[0], expidx, 'sir.csv')
+        summarypath = pjoin(resdir[0], expidx, 'transmcount.csv')
         aux = pd.read_csv(summarypath)
         nrows = aux.shape[0]
 
+        ERR_VAL = -1
         i_s = aux.I - aux.S
-        i_equal_s = np.where(i_s > 0)[0][0]
+        if np.where(i_s > 0)[0].size == 0: i_equal_s = ERR_VAL
+        else: i_equal_s = np.where(i_s > 0)[0][0]
 
         r_s = aux.R - aux.S
-        r_equal_s = np.where(r_s > 0)[0][0]
+        if np.where(r_s > 0)[0].size == 0: r_equal_s = ERR_VAL
+        else: r_equal_s = np.where(r_s > 0)[0][0]
 
         r_i = aux.R - aux.I
-        r_equal_i = np.where(r_i > 0)[0][0]
+        if np.where(r_i > 0)[0].size == 0: r_equal_i = ERR_VAL
+        else: r_equal_i = np.where(r_i > 0)[0][0]
 
         imax = np.max(aux.I)
-        imode = np.argmax(aux.I)
+        # imode = np.argmax(aux.I)
+        imode = aux.I.idxmax()
 
         df_sorted.loc[expidx, 't'] = nrows
         df_sorted.loc[expidx, 'iequals'] = i_equal_s
@@ -270,9 +276,10 @@ def plot_pca(resdir, outdir):
         df_sorted.loc[expidx, 'imode'] = imode
 
     X_orig = df_sorted[['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree', 't', 'iequals', 'requals', 'requali', 'imax', 'imode']]
+    print(X_orig)
     import copy
     X = copy.copy(X_orig)
-    X['topologymodel'] = X_orig.topologymodel.map({'la':0, 'er':1, 'ba':2})
+    X['topologymodel'] = X_orig.topologymodel.map({'la':0, 'er':1, 'ba':2, 'ws':3})
     X = StandardScaler().fit_transform(X.astype(float))
     n, m = X.shape
     V = np.dot(X.T, X) / (n-1)
@@ -286,7 +293,6 @@ def plot_pca(resdir, outdir):
     print(pca.explained_variance_)
     print(pca.explained_variance_ratio_)
 
-    import matplotlib.pyplot as plt
     ##########################################################
     fig, ax = plt.subplots(4,2, figsize=(20,40))
     ax[0][0].scatter(Y[:, 0], Y[:, 1])
@@ -353,6 +359,82 @@ def plot_pca(resdir, outdir):
     plt.savefig('/tmp/plots.pdf')
 
 ##########################################################
+def plot_francisco(resdir, outdir):
+    expspath = pjoin(resdir[0], 'exps.csv')
+    df = pd.read_csv(expspath, index_col='expidx')
+    df_sorted = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
+    print('Filtering by seed=0')
+    df_sorted = df_sorted[df_sorted.randomseed == 0]
+    print('n:{}'.format(df_sorted.shape[0]))
+
+    print('Filtering by thoroidal=-1 or thoroidal=0')
+    df_sorted = df_sorted[(df_sorted.lathoroidal == -1) | (df_sorted.lathoroidal == 0)]
+    print('n:{}'.format(df_sorted.shape[0]))
+
+    print('Filtering by gamma=0.75')
+    df_sorted = df_sorted[(df_sorted.gamma == 0.75)]
+    print('n:{}'.format(df_sorted.shape[0]))
+
+    print('Filtering by avgdegree=16')
+    df_sorted = df_sorted[(df_sorted.avgdegree == 16) | (df_sorted.topologymodel == 'la')]
+    print('n:{}'.format(df_sorted.shape[0]))
+
+    print('Filtering by mobilityratio=.5')
+    df_sorted = df_sorted[(df_sorted.mobilityratio == 0.5)]
+    print('n:{}'.format(df_sorted.shape[0]))
+
+    # for std_ in np.unique(df_sorted.gaussianstd):
+        # print(std_)
+    tops = np.unique(df_sorted.topologymodel)
+    # threshepoch = 700
+    for threshepoch in [300, 500, 700]:
+        # stds = np.unique(df_sorted.gaussianstd)
+        # print(stds)
+        fig, ax = plt.subplots(1, 4, figsize=(24, 6))
+        charti = 0
+        for top in tops:
+            aux = df_sorted[df_sorted.topologymodel == top]
+
+            valid = [] # filtering incomplete execution
+            recoveredratios = []
+            for j, expidx in enumerate(aux.index):
+                if not os.path.exists(pjoin(resdir[0], expidx, 'transmcount.csv')):
+                    continue
+                valid.append(expidx)
+                summarypath = pjoin(resdir[0], expidx, 'transmcount.csv')
+                aux2 = pd.read_csv(summarypath)
+
+                n = int(aux2.iloc[-1].S + aux2.iloc[-1].I + aux2.iloc[-1].R )
+                if aux2.shape[0] <= threshepoch:
+                    r = aux2.iloc[-1].R/n
+                else:
+                    r = aux2.iloc[threshepoch].R/n
+                recoveredratios.append(r)
+
+            aux = aux.loc[valid]
+            aux['recoveredratio'] = recoveredratios
+
+            # Generating colormap
+            categories = np.unique(aux.gaussianstd)
+            colors = np.linspace(0, 1, len(categories))
+            colordict = dict(zip(categories, colors))
+            mycmap = aux.gaussianstd.apply(lambda x: colordict[x])
+
+            colors_ = ['#7fc97f','#beaed4','#fdc086','#ffff99','#386cb0','#f0027f','#bf5b17','#666666']
+            for ii, std_ in enumerate(np.unique(aux.gaussianstd)):
+                ax[charti].plot(aux[aux.gaussianstd==std_].beta,
+                           aux[aux.gaussianstd==std_].recoveredratio,
+                           marker='o', c=colors_[ii], label=str(std_))
+
+            ax[charti].legend(title='Gaussian std')
+            ax[charti].set_title('Topology {}'.format(top))
+            ax[charti].set_xlabel('Beta')
+            ax[charti].set_xlim(left=0, right=1)
+            ax[charti].set_ylim(bottom=0, top=1)
+            ax[charti].set_ylabel('Recovered ratio')
+            charti += 1
+        plt.savefig(pjoin(outdir, '{}.pdf'.format(threshepoch)))
+##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('resdir', nargs='+',
@@ -363,10 +445,11 @@ def main():
                         datefmt='%Y%m%d %H:%M', level=logging.DEBUG)
 
     outdir = '/tmp'
-    plot_parallel(args.resdir, outdir)
+    # plot_parallel(args.resdir, outdir)
     # plot_sir_all(args.resdir, outdir)
     # plot_measures_luc(args.resdir, outdir)
     # plot_pca(args.resdir, outdir)
+    plot_francisco(args.resdir, outdir)
 
 if __name__ == "__main__":
     main()
