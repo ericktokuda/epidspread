@@ -308,7 +308,7 @@ def run_experiment(cfg):
             info('exp:{}, t:{}'.format(expidx, ep))
 
         nparticlesstds[ep] = np.std([len(x) for x in particles])
-        if mobilityratio == -1 or p.random.random() < mobilityratio:
+        if mobilityratio == -1 or np.random.random() < mobilityratio:
             particles = step_mobility(g, particles, nagents)
 
             steps_mobility += 1
