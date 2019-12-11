@@ -150,7 +150,6 @@ def generate_graph(topologymodel, nvertices, avgdegree,
     aux = np.array(layout.coords)
     # coords = (aux - np.mean(aux, 0))/np.std(aux, 0) # standardization
     coords = -1 + 2*(aux - np.min(aux, 0))/(np.max(aux, 0)-np.min(aux, 0)) # minmax
-
     return g, coords
 ##########################################################
 def run_experiment(cfg):
@@ -177,7 +176,7 @@ def run_experiment(cfg):
     nagents = 4*nvertices
     s0        = int(nagents*cfg['s0'])
     r0        = int(nagents*cfg['r0'])
-    i0        = nagents - s0 - r0 # To sum up #nagents
+    i0        = nagents - s0 - r0 # To sum up nagents
     beta      = cfg['beta']
     gamma     = cfg['gamma']
     ngaussians = cfg['ngaussians']
@@ -210,8 +209,8 @@ def run_experiment(cfg):
     status[0: s0] = SUSCEPTIBLE
     status[s0:s0+i0] = INFECTED
     status[s0+i0:] = RECOVERED
+    info('exp:{} Generating random distribution of S, I, R ...'.format(cfg['expidx']))
     np.random.shuffle(status)
-    info('exp:{} Generated random distribution of S, I, R ...'.format(cfg['expidx']))
 
     visual = {}
     visual["bbox"] = (mapside*10*cfg['plotzoom'], mapside*10*cfg['plotzoom'])
@@ -237,6 +236,7 @@ def run_experiment(cfg):
     plotarea = 36   # Square of the center surrounded by radius 3
                     # (equiv to 99.7% of the points of a gaussian)
 
+    info('exp:{} Generating graph with topology {}...'.format(expidx, topologymodel))
     g, coords =  generate_graph(topologymodel, nvertices, avgdegree,
                                 latticethoroidal, baoutpref, wsrewiring)
 
@@ -244,7 +244,7 @@ def run_experiment(cfg):
 
     ntransmissions = np.zeros(nvertices, dtype=int)
     ########################################################## Distrib. of particles
-    info('exp:{} Generating uniform distribution of agents ...'.format(expidx))
+    info('exp:{} Generating agents location distribution...'.format(expidx))
     nparticles = np.ndarray(nvertices, dtype=int)
     aux = np.random.rand(nvertices) # Uniform distrib
     nparticles = np.floor(aux / np.sum(aux) *N).astype(int)
@@ -292,10 +292,6 @@ def run_experiment(cfg):
         statuscount, _  = compute_statuses_sums(status, particles, nvertices, )
 
         visual["edge_width"] = 0.0
-        plot_epoch_graphs(-1, g, coords, visual, status, nvertices, particles,
-                          N, b, outgradientspath,
-                          statuscount[:, 0], statuscount[:, 1], statuscount[:, 2],
-                          outdir)
 
     maxepoch = nepochs if nepochs > 0 else MAX
     steps_mobility = 0
@@ -304,6 +300,13 @@ def run_experiment(cfg):
 
     for ep in range(1, maxepoch):
         lastepoch = ep
+
+        if plotrate > 0 and ep % plotrate == 0:
+            plot_epoch_graphs(ep-1, g, coords, visual, status, nvertices, particles,
+                              N, b, outgradientspath,
+                              statuscount[:, 0], statuscount[:, 1], statuscount[:, 2],
+                              outdir)
+
         if ep % 10 == 0:
             info('exp:{}, t:{}'.format(expidx, ep))
 
@@ -324,16 +327,11 @@ def run_experiment(cfg):
         # print(newtransmissions)
         ntransmissions += newtransmissions
       
-        dist, distsum  = compute_statuses_sums(status, particles, nvertices)
+        statuscount, distsum  = compute_statuses_sums(status, particles, nvertices)
         statuscountsum[ep, :] = distsum
 
         if nepochs == -1 and np.sum(status==INFECTED) == 0: break
 
-        if plotrate > 0 and ep % plotrate == 0:
-            plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
-                              N, b, outgradientspath,
-                              dist[:, 0], dist[:, 1], dist[:, 2],
-                              outdir)
 
     ########################################################## Enhance plots
     if plotrate > 0:
@@ -541,9 +539,9 @@ def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
         zz = [0, 0,  math.log(z, N), plotalpha] if z*N > 1 else [0, 0, 0, plotalpha]
         recoveredcolor.append(zz)  
         
-    outsusceptiblepath = pjoin(outdir, 'susceptible{:02d}.png'.format(ep+1))
-    outinfectedpath = pjoin(outdir, 'infected{:02d}.png'.format(ep+1))
-    outrecoveredpath = pjoin(outdir, 'recovered{:02d}.png'.format(ep+1))
+    outsusceptiblepath = pjoin(outdir, 'susceptible{:02d}.png'.format(ep))
+    outinfectedpath = pjoin(outdir, 'infected{:02d}.png'.format(ep))
+    outrecoveredpath = pjoin(outdir, 'recovered{:02d}.png'.format(ep))
 
     igraph.plot(g, target=outsusceptiblepath, layout=coords.tolist(),
                 vertex_color=susceptiblecolor, **visual)
@@ -552,7 +550,7 @@ def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
     igraph.plot(g, target=outrecoveredpath, layout=coords.tolist(),
                 vertex_color=recoveredcolor, **visual)
 
-    outconcatpath = pjoin(outdir, 'concat{:02d}.png'.format(ep+1))
+    outconcatpath = pjoin(outdir, 'concat{:02d}.png'.format(ep))
     proc = Popen('convert {} {} {} {} +append {}'.format(outgradientspath,
                                                          outsusceptiblepath,
                                                          outinfectedpath,
