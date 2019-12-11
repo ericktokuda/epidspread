@@ -83,48 +83,72 @@ def step_mobility(g, particles, nagents):
     return particles
 
 ##########################################################
-def step_transmission(g, status, double beta, double gamma, particles):
+cpdef step_transmission(g, long[:] status, double beta, double gamma, particles):
+# cpdef step_transmission(g, status, double beta, double gamma, particles):
     """Give a step in the transmission dynamic
 
     Args:
     g(igraph.Graph): instance of a graph
-    status(list): statuses of each particle
+    status(list): status of each particle
     beta(float): contagion chance
     gamma(float): recovery chance
     particles(list of list): the set of particle ids for each vertex
 
     Returns:
-    list: updated statuses
+    list: updated status
     """
 
-    statuses_fixed = copy.deepcopy(status)
-    ntransmissions = np.zeros((g.vcount()), dtype=int)
-
-    cdef long N, nsusceptible, ninfected, nrecovered
+    cdef long nlocalparticles, nsusceptible, ninfected, nrecovered
     cdef long numnewinfected, numnewrecovered
+    cdef int i, j, acc
+
+    cdef long[:] status_fixed = status.copy()
+    cdef int nparticles = len(status)
+    cdef long[:] ntransmissions = np.zeros((g.vcount()), dtype=np.int_)
 
     for i, _ in enumerate(g.vs):
-        statuses = statuses_fixed[particles[i]]
-        N = len(statuses)
-        nsusceptible = len(statuses[statuses==SUSCEPTIBLE])
-        ninfected = len(statuses[statuses==INFECTED])
-        nrecovered = len(statuses[statuses==RECOVERED])
+        nlocalparticles = len(particles[i]) # number of particles in vertex i
+        localparticles = particles[i]
 
-        indsusceptible = np.where(statuses_fixed==SUSCEPTIBLE)[0]
-        indinfected = np.where(statuses_fixed==INFECTED)[0]
-        indrecovered = np.where(statuses_fixed==RECOVERED)[0]
+        nsusceptible = 0
+        ninfected =  0
+        nrecovered =  0
+        for j in range(nlocalparticles):
+            if status[localparticles[j]] == 0: # status of particle j in vertex i
+                nsusceptible += 1
+            elif status[localparticles[j]] == 1:
+                ninfected += 1
+            elif status[localparticles[j]] == 2:
+                nrecovered += 1
 
         x  = np.random.rand(nsusceptible*ninfected)
         y  = np.random.rand(ninfected)
-        # x  = torch.rand((nsusceptible*ninfected,)).numpy()
-        # y  = torch.rand((ninfected,)).numpy()
+
         numnewinfected = np.sum(x <= beta)
         numnewrecovered = np.sum(y <= gamma)
+
         if numnewinfected > nsusceptible: numnewinfected = nsusceptible
         if numnewrecovered > ninfected: numnewrecovered = ninfected
 
         ntransmissions[i] = numnewinfected
-        status[indsusceptible[0:numnewinfected]] = INFECTED
-        status[indinfected[0:numnewrecovered]] = RECOVERED
+
+        if numnewinfected > 0:
+            acc = 0
+            for j in range(nlocalparticles):
+                if status_fixed[localparticles[j]] == SUSCEPTIBLE:
+                    status[localparticles[j]] = INFECTED # Update the modifiable
+                    acc += 1
+                    if acc == numnewinfected: break
+
+        # We use a copy to avoid considering the newly infected agents because
+        # this is an offline update step
+        if numnewrecovered > 0:
+            acc = 0
+            for j in range(nlocalparticles):
+                if status_fixed[localparticles[j]] == INFECTED:
+                    status[localparticles[j]] = RECOVERED
+                    acc += 1
+                    if acc == numnewrecovered: break
+
     return status, ntransmissions
 ##########################################################

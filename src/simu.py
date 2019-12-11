@@ -314,6 +314,8 @@ def run_experiment(cfg):
 
         nparticlesstds[ep] = np.std([len(x) for x in particles])
         status, newtransmissions = step_transmission(g, status, beta, gamma, particles)
+        status = np.asarray(status)
+        # print(newtransmissions)
         ntransmissions += newtransmissions
       
         dist, distsum  = compute_statuses_sums(status, particles, nvertices)
