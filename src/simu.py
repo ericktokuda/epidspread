@@ -373,6 +373,7 @@ def run_experiment(cfg):
         elapsed = '{:.2f}'.format(elapsed),
         nsteps = lastepoch,
         stepsmobility = steps_mobility,
+        ncomponents = len(g.components())
     )
     with open(summarypath, 'w') as fh:
         fh.write(','.join(summary.keys()) + '\n')
