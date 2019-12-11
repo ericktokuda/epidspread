@@ -172,7 +172,7 @@ def run_experiment(cfg):
     wsrewiring = cfg['wsrewiring']
     mobilityratio   = cfg['mobilityratio']
     nepochs   = cfg['nepochs']
-    nagents = 2*nvertices
+    nagents = 5*nvertices
     s0        = int(nagents*cfg['s0'])
     r0        = int(nagents*cfg['r0'])
     i0        = nagents - s0 - r0 # To sum up #nagents
@@ -297,23 +297,27 @@ def run_experiment(cfg):
 
     maxepoch = nepochs if nepochs > 0 else MAX
     steps_mobility = 0
-    transmstep[0] = False
+    if mobilityratio == -1: transmstep[0] = -1
+    else: transmstep[0] = 0
 
     for ep in range(1, maxepoch):
         lastepoch = ep
         if ep % 10 == 0:
             info('exp:{}, t:{}'.format(expidx, ep))
 
-        if np.random.random() < mobilityratio:
+        nparticlesstds[ep] = np.std([len(x) for x in particles])
+        if mobilityratio == -1 or p.random.random() < mobilityratio:
             particles = step_mobility(g, particles, nagents)
 
             steps_mobility += 1
             statuscountsum[ep, :] = statuscountsum[ep-1, :]
-            transmstep[ep] = False
-            continue
+            transmstep[ep] = 0
 
-        nparticlesstds[ep] = np.std([len(x) for x in particles])
-        status, newtransmissions = step_transmission(g, status, beta, gamma, particles)
+            if mobilityratio != -1:
+                transmstep[ep] = -1
+                continue
+
+        status, newtransmissions = step_transmission(g.vcount(), status, beta, gamma, particles)
         status = np.asarray(status)
         # print(newtransmissions)
         ntransmissions += newtransmissions

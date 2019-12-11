@@ -83,7 +83,7 @@ def step_mobility(g, particles, nagents):
     return particles
 
 ##########################################################
-cpdef step_transmission(g, long[:] status, double beta, double gamma, particles):
+cpdef step_transmission(long nvertices, long[:] status, double beta, double gamma, particles):
 # cpdef step_transmission(g, status, double beta, double gamma, particles):
     """Give a step in the transmission dynamic
 
@@ -104,9 +104,9 @@ cpdef step_transmission(g, long[:] status, double beta, double gamma, particles)
 
     cdef long[:] status_fixed = status.copy()
     cdef int nparticles = len(status)
-    cdef long[:] ntransmissions = np.zeros((g.vcount()), dtype=np.int_)
+    cdef long[:] ntransmissions = np.zeros((nvertices), dtype=np.int_)
 
-    for i, _ in enumerate(g.vs):
+    for i in range(nvertices):
         nlocalparticles = len(particles[i]) # number of particles in vertex i
         localparticles = particles[i]
 
