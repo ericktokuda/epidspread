@@ -104,6 +104,12 @@ def step_transmission(g, status, double beta, double gamma, particles):
     cdef long numnewinfected, numnewrecovered
 
     for i, _ in enumerate(g.vs):
+        # print(type(particles))
+        # print(type(particles[i]))
+        # print((particles[i]))
+        # print(type(status))
+        # print(type(statuses_fixed))
+        # print(statuses_fixed)
         statuses = statuses_fixed[particles[i]]
         N = len(statuses)
         nsusceptible = len(statuses[statuses==SUSCEPTIBLE])
@@ -114,8 +120,13 @@ def step_transmission(g, status, double beta, double gamma, particles):
         indinfected = np.where(statuses_fixed==INFECTED)[0]
         indrecovered = np.where(statuses_fixed==RECOVERED)[0]
 
-        x  = np.random.rand(nsusceptible*ninfected)
-        y  = np.random.rand(ninfected)
+        # x  = np.random.rand(nsusceptible*ninfected)
+        # y  = np.random.rand(ninfected)
+        x  = np.zeros(nsusceptible*ninfected)
+        y  = np.zeros(ninfected)
+        if x.shape[0] > 0: x[-1] = 1
+        if y.shape[0] > 0: y[-1] = 1
+
         # x  = torch.rand((nsusceptible*ninfected,)).numpy()
         # y  = torch.rand((ninfected,)).numpy()
         numnewinfected = np.sum(x <= beta)
