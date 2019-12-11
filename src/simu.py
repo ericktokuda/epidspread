@@ -148,7 +148,9 @@ def generate_graph(topologymodel, nvertices, avgdegree,
         layout = g.layout('fr')
 
     aux = np.array(layout.coords)
-    coords = (aux - np.mean(aux, 0))/np.std(aux, 0) # stndard normalization
+    # coords = (aux - np.mean(aux, 0))/np.std(aux, 0) # standardization
+    coords = -1 + 2*(aux - np.min(aux, 0))/(np.max(aux, 0)-np.min(aux, 0)) # minmax
+
     return g, coords
 ##########################################################
 def run_experiment(cfg):
