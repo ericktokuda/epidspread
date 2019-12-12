@@ -324,7 +324,6 @@ def run_experiment(cfg):
 
         status, newtransmissions = step_transmission(g.vcount(), status, beta, gamma, particles)
         status = np.asarray(status)
-        # print(newtransmissions)
         ntransmissions += newtransmissions
       
         statuscount, distsum  = compute_statuses_sums(status, particles, nvertices)
@@ -669,9 +668,8 @@ def prepend_random_ids_columns(df):
             if hash not in hashes: break
         hashes.append(hash)
 
-    df['expidx'] = hashes
-    cols = df.columns.tolist()
-    return df[['expidx'] + cols[:-1]]
+    df.insert(0, 'expidx', hashes)
+    return df
 
 ##########################################################
 def main():
@@ -704,7 +702,8 @@ def main():
 
     configdf = load_df_from_json(cfg)
     cols = configdf.columns.tolist()
-    configdf = prepend_random_ids_columns(configdf)
+    if not 'expidx' in configdf.columns:
+        configdf = prepend_random_ids_columns(configdf)
     configdf.set_index('expidx')
 
     # types_ = dict(
