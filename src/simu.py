@@ -166,6 +166,8 @@ def run_experiment(cfg):
     ##########################################################  Local vars
     outdir = cfg['outdir']
     nvertices = cfg['nvertices']
+    nagentspervertex   = cfg['nagentspervertex']
+    nagents   = nagentspervertex * nvertices
     topologymodel = cfg['topologymodel']
     avgdegree = cfg['avgdegree']
     latticethoroidal = cfg['lathoroidal']
@@ -173,7 +175,6 @@ def run_experiment(cfg):
     wsrewiring = cfg['wsrewiring']
     mobilityratio   = cfg['mobilityratio']
     nepochs   = cfg['nepochs']
-    nagents = 4*nvertices
     s0        = int(nagents*cfg['s0'])
     r0        = int(nagents*cfg['r0'])
     i0        = nagents - s0 - r0 # To sum up nagents
@@ -195,7 +196,7 @@ def run_experiment(cfg):
     summarypath = pjoin(outdir, 'summary.csv')
     runningpath = pjoin(outdir, 'RUNNING') # Lock file
 
-    if os.path.exists(transmpath):
+    if os.path.exists(summarypath):
         return
     elif os.path.exists(runningpath):
         startedtime = float(open(runningpath).read().strip())
