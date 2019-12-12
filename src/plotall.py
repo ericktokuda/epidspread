@@ -363,76 +363,105 @@ def plot_francisco(resdir, outdir):
     expspath = pjoin(resdir[0], 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
     df_sorted = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
-    print('Filtering by seed=0')
-    df_sorted = df_sorted[df_sorted.randomseed == 0]
-    print('n:{}'.format(df_sorted.shape[0]))
+    # print('Filtering by seed=0')
+    # df_sorted = df_sorted[df_sorted.randomseed == 0]
+    # print('n:{}'.format(df_sorted.shape[0]))
 
-    print('Filtering by thoroidal=-1 or thoroidal=0')
-    df_sorted = df_sorted[(df_sorted.lathoroidal == -1) | (df_sorted.lathoroidal == 0)]
-    print('n:{}'.format(df_sorted.shape[0]))
+    # print('Filtering by thoroidal=-1 or thoroidal=0')
+    # df_sorted = df_sorted[(df_sorted.lathoroidal == -1) | (df_sorted.lathoroidal == 0)]
+    # print('n:{}'.format(df_sorted.shape[0]))
 
-    print('Filtering by gamma=0.75')
-    df_sorted = df_sorted[(df_sorted.gamma == 0.75)]
-    print('n:{}'.format(df_sorted.shape[0]))
+    # print('Filtering by gamma=1')
+    # df_sorted = df_sorted[(df_sorted.gamma == 1)]
+    # print('n:{}'.format(df_sorted.shape[0]))
 
-    print('Filtering by avgdegree=16')
-    df_sorted = df_sorted[(df_sorted.avgdegree == 16) | (df_sorted.topologymodel == 'la')]
-    print('n:{}'.format(df_sorted.shape[0]))
+    # print('Filtering by avgdegree=16')
+    # df_sorted = df_sorted[(df_sorted.avgdegree == 16) | (df_sorted.topologymodel == 'la')]
+    # print('n:{}'.format(df_sorted.shape[0]))
 
-    print('Filtering by mobilityratio=.5')
-    df_sorted = df_sorted[(df_sorted.mobilityratio == 0.5)]
-    print('n:{}'.format(df_sorted.shape[0]))
+    # print('Filtering by mobilityratio=-1')
+    # df_sorted = df_sorted[(df_sorted.mobilityratio == 0.5)]
+    # print('n:{}'.format(df_sorted.shape[0]))
 
-    # for std_ in np.unique(df_sorted.gaussianstd):
-        # print(std_)
     tops = np.unique(df_sorted.topologymodel)
-    # threshepoch = 700
-    for threshepoch in [300, 500, 700]:
-        # stds = np.unique(df_sorted.gaussianstd)
-        # print(stds)
+    # tops = ['er']
+    betas = np.unique(df_sorted.beta)
+    stds = np.unique(df_sorted.gaussianstd)
+
+    for threshepoch in [5, 10, 15]:
         fig, ax = plt.subplots(1, 4, figsize=(24, 6))
         charti = 0
+        cols = ['topologymodel', 'beta', 'gaussianstd', 'recmean', 'recstd']
+
         for top in tops:
+            datadict = {k: [] for k in cols}
             aux = df_sorted[df_sorted.topologymodel == top]
 
             valid = [] # filtering incomplete execution
-            recoveredratios = []
-            for j, expidx in enumerate(aux.index):
-                if not os.path.exists(pjoin(resdir[0], expidx, 'transmcount.csv')):
-                    continue
-                valid.append(expidx)
-                summarypath = pjoin(resdir[0], expidx, 'transmcount.csv')
-                aux2 = pd.read_csv(summarypath)
 
-                n = int(aux2.iloc[-1].S + aux2.iloc[-1].I + aux2.iloc[-1].R )
-                if aux2.shape[0] <= threshepoch:
-                    r = aux2.iloc[-1].R/n
-                else:
-                    r = aux2.iloc[threshepoch].R/n
-                recoveredratios.append(r)
+            for b in betas:
+                aux2 = aux[aux.beta == b]
 
-            aux = aux.loc[valid]
-            aux['recoveredratio'] = recoveredratios
+                for std_ in stds:
+                    aux3 = aux2[aux2.gaussianstd == std_]
+                    # input(aux3.shape)
+
+                    nruns = aux3.shape[0]
+                    recoveredratios = []
+
+                    for j, expidx in enumerate(aux3.index):
+                        if not os.path.exists(pjoin(resdir[0], expidx, 'transmcount.csv')):
+                            continue
+
+                        valid.append(expidx)
+
+                        summarypath = pjoin(resdir[0], expidx, 'transmcount.csv')
+                        aux4 = pd.read_csv(summarypath)
+
+                        n = float(aux4.iloc[0].S + aux4.iloc[0].I + aux4.iloc[0].R )
+                        # print(n)
+
+                        if aux4.shape[0] <= threshepoch: # did not last threshepochs
+                            r = aux4.iloc[-1].R / n
+                        else:
+                            r = aux4.iloc[threshepoch].R / n
+
+                        recoveredratios.append(r)
+
+                    #append row
+                    datadict['topologymodel'].append(top)
+                    datadict['beta'].append(b)
+                    datadict['gaussianstd'].append(std_)
+                    datadict['recmean'].append(np.mean(recoveredratios))
+                    datadict['recstd'].append(np.std(recoveredratios))
+            
+            data = pd.DataFrame.from_dict(datadict)
 
             # Generating colormap
-            categories = np.unique(aux.gaussianstd)
+            categories = np.unique(data.gaussianstd)
             colors = np.linspace(0, 1, len(categories))
             colordict = dict(zip(categories, colors))
             mycmap = aux.gaussianstd.apply(lambda x: colordict[x])
 
-            colors_ = ['#7fc97f','#beaed4','#fdc086','#ffff99','#386cb0','#f0027f','#bf5b17','#666666']
-            for ii, std_ in enumerate(np.unique(aux.gaussianstd)):
-                ax[charti].plot(aux[aux.gaussianstd==std_].beta,
-                           aux[aux.gaussianstd==std_].recoveredratio,
+            colors_ = ['#7fc97f','#beaed4','#fdc086','#ffff99',
+                       '#386cb0','#f0027f','#bf5b17','#666666']
+
+            for ii, std_ in enumerate(stds):
+                ax[charti].errorbar(data[data.gaussianstd==std_].beta,
+                           data[data.gaussianstd==std_].recmean,
+                           yerr=data[data.gaussianstd==std_].recstd,
                            marker='o', c=colors_[ii], label=str(std_))
 
             ax[charti].legend(title='Gaussian std')
             ax[charti].set_title('Topology {}'.format(top))
             ax[charti].set_xlabel('Beta')
             ax[charti].set_xlim(left=0, right=1)
-            ax[charti].set_ylim(bottom=0, top=1)
+            # ax[charti].set_ylim(bottom=0, top=1)
             ax[charti].set_ylabel('Recovered ratio')
+            # ax[charti].set_yscale('log')
+            print(charti, data.shape)
             charti += 1
+            # break
         plt.savefig(pjoin(outdir, '{}.pdf'.format(threshepoch)))
 ##########################################################
 def main():
