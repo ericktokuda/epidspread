@@ -1,6 +1,7 @@
 {
         "outdir" : ["/tmp/toy02/"],
         "nvertices" : [16],
+        "nagentspervertex" : [1],
         "topologymodel" : ["lattice"],
         "avgdegree" : [-1],
         "lathoroidal" : [true],
