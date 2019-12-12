@@ -187,12 +187,22 @@ def run_experiment(cfg):
     randomseed= cfg['randomseed']
     expidx= cfg['expidx']
 
+    DELAYTIME = 3600
+
     ########################################################## 
     outdir = pjoin(outdir, expidx)
     transmpath = pjoin(outdir, 'transmcount.csv')
     summarypath = pjoin(outdir, 'summary.csv')
-    if os.path.exists(transmpath): return
+    runningpath = pjoin(outdir, 'RUNNING') # Lock file
+
+    if os.path.exists(transmpath):
+        return
+    elif os.path.exists(runningpath):
+        startedtime = float(open(runningpath).read().strip())
+        if (time.time() - startedtime) < DELAYTIME: return
+
     os.makedirs(outdir, exist_ok=True) # Create outdir
+    open(runningpath, 'w').write(str(time.time()))
 
     ##########################################################
     info('exp:{} Copying config file ...'.format(expidx))
@@ -364,7 +374,7 @@ def run_experiment(cfg):
              fig, ax, outdir)
 
     elapsed = time.time() - t0
-    info('exp:{} Elapsed time: {:.2f}h'.format(expidx, elapsed/3600))
+    info('exp:{} Elapsed time: {:.2f}min'.format(expidx, elapsed/60))
     summary = dict(
         server = socket.gethostname(),
         elapsed = '{:.2f}'.format(elapsed),
@@ -375,9 +385,11 @@ def run_experiment(cfg):
     with open(summarypath, 'w') as fh:
         fh.write(','.join(summary.keys()) + '\n')
         fh.write(','.join(str(x) for x in summary.values()))
+
     # summarydf = pd.DataFrame(summary)
     # with open(elapsedpath, 'w') as fh: fh.write(str(elapsed))
     # summarydf.to_csv(summarypath)
+    os.remove(runningpath) # Remove lock
     info('exp:{} Finished. Results are in {}'.format(expidx, outdir))
 
 ########################################################## Plot SIR over time
