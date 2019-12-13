@@ -360,23 +360,44 @@ def plot_pca(resdir, outdir):
 
 ##########################################################
 def plot_francisco(resdir, outdir):
+    nagentspervertex = 1
+    avgdegree = 16
+    lathoroidal = 1
+    wsrewiring = 0.0001
+    mobilityratio = -1
+    gamma = 0.2
+
     expspath = pjoin(resdir[0], 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
     df_sorted = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
-    # print('Filtering by seed=0')
-    # df_sorted = df_sorted[df_sorted.randomseed == 0]
-    # print('n:{}'.format(df_sorted.shape[0]))
 
-    # print('Filtering by thoroidal=-1 or thoroidal=0')
-    # df_sorted = df_sorted[(df_sorted.lathoroidal == -1) | (df_sorted.lathoroidal == 0)]
-    # print('n:{}'.format(df_sorted.shape[0]))
+    df_sorted = df_sorted[(df_sorted.avgdegree == avgdegree)]
+    print('Filtering by nagentspervertex:{} in {} rows'.format(nagentspervertex,
+                                                                 df_sorted.shape[0]))
 
-    # print('Filtering by gamma=1')
-    # df_sorted = df_sorted[(df_sorted.gamma == 1)]
-    # print('n:{}'.format(df_sorted.shape[0]))
+    df_sorted = df_sorted[(df_sorted.avgdegree == avgdegree)]
+    print('Filtering by avgdegree:{} resulted in {} rows'.format(avgdegree,
+                                                                 df_sorted.shape[0]))
 
-    # print('Filtering by avgdegree=16')
-    # df_sorted = df_sorted[(df_sorted.avgdegree == 16) | (df_sorted.topologymodel == 'la')]
+    df_sorted = df_sorted[(df_sorted.lathoroidal < 1)]
+    print('Filtering by lathoroidal<{} resulted in {} rows'.format(lathoroidal,
+                                                                 df_sorted.shape[0]))
+
+    df_sorted = df_sorted[(df_sorted.wsrewiring == wsrewiring)]
+    print('Filtering by wsrewiring:{} resulted in {} rows'.format(wsrewiring,
+                                                                 df_sorted.shape[0]))
+
+    df_sorted = df_sorted[(df_sorted.wsrewiring == mobilityratio)]
+    print('Filtering by mobilityratio:{} resulted in {} rows'.format(mobilityratio,
+                                                                 df_sorted.shape[0]))
+
+    df_sorted = df_sorted[(df_sorted.gamma == gamma)]
+    print('Filtering by gamma:{} resulted in {} rows'.format(gamma, df_sorted.shape[0]))
+
+
+
+    df_sorted = df_sorted[(df_sorted.avgdegree == 16) | (df_sorted.topologymodel == 'la')]
+    print('Filtering by gamma={} resulted in {} rows'.format(gamma, df_sorted.shape[0]))
     # print('n:{}'.format(df_sorted.shape[0]))
 
     # print('Filtering by mobilityratio=-1')
