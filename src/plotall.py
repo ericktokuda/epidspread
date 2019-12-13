@@ -359,64 +359,62 @@ def plot_pca(resdir, outdir):
     plt.savefig('/tmp/plots.pdf')
 
 ##########################################################
-def plot_francisco(resdir, outdir):
+def filter_exps_df(df, nagentspervertex=None, avgdegree=None, lathoroidal=None,
+                   wsrewiring=None, mobilityratio=None, gamma=None):
+    df = df[(df.avgdegree == avgdegree)]
+    info('Filtering by nagentspervertex:{} in {} rows'.format(nagentspervertex,
+                                                                 df.shape[0]))
+
+    df = df[(df.avgdegree == avgdegree)]
+    info('Filtering by avgdegree:{} resulted in {} rows'.format(avgdegree,
+                                                                 df.shape[0]))
+
+    df = df[(df.lathoroidal < 1)]
+    info('Filtering by lathoroidal<{} resulted in {} rows'.format(lathoroidal,
+                                                                 df.shape[0]))
+
+    df = df[(df.wsrewiring == wsrewiring)]
+    info('Filtering by wsrewiring:{} resulted in {} rows'.format(wsrewiring,
+                                                                 df.shape[0]))
+
+    df = df[(df.mobilityratio == mobilityratio)]
+    info('Filtering by mobilityratio:{} resulted in {} rows'.format(mobilityratio,
+                                                                 df.shape[0]))
+
+    df = df[(df.gamma == gamma)]
+    info('Filtering by gamma:{} resulted in {} rows'.format(gamma, df.shape[0]))
+    return df
+
+##########################################################
+def plot_recoveredrate_vs_beta(resdir, outdir):
     nagentspervertex = 1
     avgdegree = 16
     lathoroidal = 1
     wsrewiring = 0.0001
-    mobilityratio = -1
+    mobilityratio = -1.0
     gamma = 0.2
-
+    epochthresh = [5, 15, 30, 50]
     expspath = pjoin(resdir[0], 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
-    df_sorted = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
+    df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
 
-    df_sorted = df_sorted[(df_sorted.avgdegree == avgdegree)]
-    print('Filtering by nagentspervertex:{} in {} rows'.format(nagentspervertex,
-                                                                 df_sorted.shape[0]))
-
-    df_sorted = df_sorted[(df_sorted.avgdegree == avgdegree)]
-    print('Filtering by avgdegree:{} resulted in {} rows'.format(avgdegree,
-                                                                 df_sorted.shape[0]))
-
-    df_sorted = df_sorted[(df_sorted.lathoroidal < 1)]
-    print('Filtering by lathoroidal<{} resulted in {} rows'.format(lathoroidal,
-                                                                 df_sorted.shape[0]))
-
-    df_sorted = df_sorted[(df_sorted.wsrewiring == wsrewiring)]
-    print('Filtering by wsrewiring:{} resulted in {} rows'.format(wsrewiring,
-                                                                 df_sorted.shape[0]))
-
-    df_sorted = df_sorted[(df_sorted.wsrewiring == mobilityratio)]
-    print('Filtering by mobilityratio:{} resulted in {} rows'.format(mobilityratio,
-                                                                 df_sorted.shape[0]))
-
-    df_sorted = df_sorted[(df_sorted.gamma == gamma)]
-    print('Filtering by gamma:{} resulted in {} rows'.format(gamma, df_sorted.shape[0]))
+    filter_exps_df(df, nagentspervertex=nagentspervertex, avgdegree=avgdegree,
+                   lathoroidal=lathoroidal, wsrewiring=wsrewiring,
+                   mobilityratio=mobilityratio, gamma=gamma)
 
 
+    tops = np.unique(df.topologymodel)
+    betas = np.unique(df.beta)
+    stds = np.unique(df.gaussianstd)
 
-    df_sorted = df_sorted[(df_sorted.avgdegree == 16) | (df_sorted.topologymodel == 'la')]
-    print('Filtering by gamma={} resulted in {} rows'.format(gamma, df_sorted.shape[0]))
-    # print('n:{}'.format(df_sorted.shape[0]))
-
-    # print('Filtering by mobilityratio=-1')
-    # df_sorted = df_sorted[(df_sorted.mobilityratio == 0.5)]
-    # print('n:{}'.format(df_sorted.shape[0]))
-
-    tops = np.unique(df_sorted.topologymodel)
-    # tops = ['er']
-    betas = np.unique(df_sorted.beta)
-    stds = np.unique(df_sorted.gaussianstd)
-
-    for threshepoch in [5, 10, 15]:
+    for epoch in epochthresh:
         fig, ax = plt.subplots(1, 4, figsize=(24, 6))
         charti = 0
         cols = ['topologymodel', 'beta', 'gaussianstd', 'recmean', 'recstd']
 
         for top in tops:
             datadict = {k: [] for k in cols}
-            aux = df_sorted[df_sorted.topologymodel == top]
+            aux = df[df.topologymodel == top]
 
             valid = [] # filtering incomplete execution
 
@@ -442,10 +440,10 @@ def plot_francisco(resdir, outdir):
                         n = float(aux4.iloc[0].S + aux4.iloc[0].I + aux4.iloc[0].R )
                         # print(n)
 
-                        if aux4.shape[0] <= threshepoch: # did not last threshepochs
+                        if aux4.shape[0] <= epoch: # did not last threshepochs
                             r = aux4.iloc[-1].R / n
                         else:
-                            r = aux4.iloc[threshepoch].R / n
+                            r = aux4.iloc[epoch].R / n
 
                         recoveredratios.append(r)
 
@@ -480,10 +478,8 @@ def plot_francisco(resdir, outdir):
             # ax[charti].set_ylim(bottom=0, top=1)
             ax[charti].set_ylabel('Recovered ratio')
             # ax[charti].set_yscale('log')
-            print(charti, data.shape)
             charti += 1
-            # break
-        plt.savefig(pjoin(outdir, '{}.pdf'.format(threshepoch)))
+        plt.savefig(pjoin(outdir, '{}.pdf'.format(epoch)))
 ##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -499,7 +495,7 @@ def main():
     # plot_sir_all(args.resdir, outdir)
     # plot_measures_luc(args.resdir, outdir)
     # plot_pca(args.resdir, outdir)
-    plot_francisco(args.resdir, outdir)
+    plot_recoveredrate_vs_beta(args.resdir, outdir)
 
 if __name__ == "__main__":
     main()
