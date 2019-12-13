@@ -362,7 +362,7 @@ def plot_pca(resdir, outdir):
 def filter_exps_df(df, nagentspervertex=None, avgdegree=None, lathoroidal=None,
                    wsrewiring=None, mobilityratio=None, gamma=None):
     df = df[(df.avgdegree == avgdegree)]
-    info('Filtering by nagentspervertex:{} in {} rows'.format(nagentspervertex,
+    info('Filtering by nagentspervertex:{} resulted in {} rows'.format(nagentspervertex,
                                                                  df.shape[0]))
 
     df = df[(df.avgdegree == avgdegree)]
@@ -393,7 +393,8 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
     wsrewiring = 0.0001
     mobilityratio = -1.0
     gamma = 0.2
-    epochthresh = [5, 15, 30, 50]
+    epochthreshs = [5, 15, 30, 50]
+    # epochthreshs = [0, 5]
     expspath = pjoin(resdir[0], 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
     df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
@@ -407,12 +408,19 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
     betas = np.unique(df.beta)
     stds = np.unique(df.gaussianstd)
 
-    for epoch in epochthresh:
-        fig, ax = plt.subplots(1, 4, figsize=(24, 6))
+    fig, ax = plt.subplots(len(epochthreshs), 4, figsize=(24, 6*len(epochthreshs)))
+
+    for a, col in zip(ax[0], [str(t).upper() for t in tops]):
+        a.set_title(col, size='x-large')
+
+    for a, row in zip(ax[:,0], ['t:' + str(e) for e in epochthreshs]):
+        a.set_ylabel(row, rotation=0, size='x-large')
+
+    for i, epoch in enumerate(epochthreshs):
         charti = 0
         cols = ['topologymodel', 'beta', 'gaussianstd', 'recmean', 'recstd']
 
-        for top in tops:
+        for j, top in enumerate(tops):
             datadict = {k: [] for k in cols}
             aux = df[df.topologymodel == top]
 
@@ -428,7 +436,7 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
                     nruns = aux3.shape[0]
                     recoveredratios = []
 
-                    for j, expidx in enumerate(aux3.index):
+                    for expidx in aux3.index:
                         if not os.path.exists(pjoin(resdir[0], expidx, 'transmcount.csv')):
                             continue
 
@@ -466,20 +474,19 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
                        '#386cb0','#f0027f','#bf5b17','#666666']
 
             for ii, std_ in enumerate(stds):
-                ax[charti].errorbar(data[data.gaussianstd==std_].beta,
-                           data[data.gaussianstd==std_].recmean,
-                           yerr=data[data.gaussianstd==std_].recstd,
-                           marker='o', c=colors_[ii], label=str(std_))
+                ax[i, j].errorbar(data[data.gaussianstd==std_].beta,
+                                    data[data.gaussianstd==std_].recmean,
+                                    yerr=data[data.gaussianstd==std_].recstd,
+                                    marker='o', c=colors_[ii], label=str(std_),
+                                    alpha=0.5)
 
-            ax[charti].legend(title='Gaussian std')
-            ax[charti].set_title('Topology {}'.format(top))
-            ax[charti].set_xlabel('Beta')
-            ax[charti].set_xlim(left=0, right=1)
-            # ax[charti].set_ylim(bottom=0, top=1)
-            ax[charti].set_ylabel('Recovered ratio')
-            # ax[charti].set_yscale('log')
-            charti += 1
-        plt.savefig(pjoin(outdir, '{}.pdf'.format(epoch)))
+            ax[i, j].legend(title='Gaussian std')
+            ax[i, j].set_xlim(left=0, right=1)
+            # ax[i, j].set_ylim(bottom=0, top=1)
+            # ax[i, j].set_yscale('log')
+    fig.suptitle('Recovered ratio vs beta', size='xx-large')
+    plt.tight_layout()
+    plt.savefig(pjoin(outdir, '{}.pdf'.format('out')))
 ##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
