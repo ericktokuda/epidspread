@@ -487,6 +487,7 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
     fig.suptitle('Recovered ratio vs beta', size='xx-large')
     plt.tight_layout()
     plt.savefig(pjoin(outdir, '{}.pdf'.format('out')))
+
 ##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

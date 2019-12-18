@@ -266,7 +266,7 @@ def export_map(coords, gradients, mappath, expidx):
 
 
 ##########################################################
-def plot_gradients(g, outgradientspath, visual):
+def plot_gradients(g, coords, outgradientspath, visual, plotalpha):
     """Plot the gradients map
 
     Args:
@@ -280,13 +280,12 @@ def plot_gradients(g, outgradientspath, visual):
     # gradientscolors = [1, 1, 1]*g.vs['gradient']
     gradsum = float(np.sum(g.vs['gradient']))
     gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
-    outgradientspath = pjoin(outdir, 'gradients.png')
     igraph.plot(g, target=outgradientspath, layout=coords.tolist(),
                 vertex_color=gradientscolors,
                 **visual)
 
 ##########################################################
-def merge_all_plots(animationpath):
+def merge_all_plots(outdir, animationpath):
     """Fork a process to generate a mosaic of the plots.
     Requires Imagemagick to work 
 
@@ -378,6 +377,7 @@ def run_experiment(cfg):
     mappath = pjoin(outdir, 'attraction.csv')
     animationpath = pjoin(outdir, 'animation.gif')
     ntransmpervertexpath = pjoin(outdir, 'ntransmpervertex.csv')
+    outgradientspath = pjoin(outdir, 'gradients.png')
     sirplotpath = pjoin(outdir, 'sir.png')
 
     if os.path.exists(summarypath):
@@ -423,8 +423,8 @@ def run_experiment(cfg):
     export_map(coords, g.vs['gradient'], mappath, expidx)
 
     if plotrate > 0:
-        plot_gradients(g, outgradientspath, visual)
-        statuscountpervertex, _  = sum_status_per_vertex(status, particles, nvertices, )
+        plot_gradients(g, coords, outgradientspath, visual, plotalpha)
+        statuscountpervertex  = sum_status_per_vertex(status, particles, nvertices, )
         visual["edge_width"] = 0.0
 
     maxepoch = nepochs if nepochs > 0 else MAX
@@ -435,7 +435,7 @@ def run_experiment(cfg):
 
         if plotrate > 0 and ep % plotrate == 0:
             plot_epoch_graphs(ep-1, g, coords, visual, status, nvertices, particles,
-                              N, outgradientspath,
+                              nagents, outgradientspath,
                               statuscountpervertex[:, 0], statuscountpervertex[:, 1], statuscountpervertex[:, 2],
                               outdir, expidx)
 
@@ -460,7 +460,7 @@ def run_experiment(cfg):
 
         if nepochs == -1 and np.sum(status==INFECTED) == 0: break
 
-    if plotrate > 0: merge_all_plots(animationpath)
+    if plotrate > 0: merge_all_plots(outdir, animationpath)
 
     statuscountperepoch = statuscountperepoch[:lastepoch+1, :]
     transmstep = transmstep[:lastepoch+1]
