@@ -55,10 +55,10 @@ def step_mobility(g, particles, nagents):
     particles_fixed = copy.deepcopy(particles) # copy to avoid being altered
 
     randnum = np.random.rand(nagents)
-    # randnum = torch.rand((nagents,))
     cdef long acc = 0
     cdef long destv
     cdef long n
+
     for i, _ in enumerate(g.vs): # For each vertex
         neighids = g.neighbors(i)
         if neighids == []: continue
@@ -76,10 +76,12 @@ def step_mobility(g, particles, nagents):
             # neighid = np.random.choice(neighids, p=gradients) # slow
             destv = fast_random_choice(neighids, gradients, randnum[acc])
             acc += 1
+
             if destv == i: continue
 
             particles[i].remove(partic)
             particles[destv].append(partic)
+
     return particles
 
 ##########################################################

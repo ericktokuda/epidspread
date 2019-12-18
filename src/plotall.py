@@ -394,7 +394,7 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
     mobilityratio = -1.0
     gamma = 0.2
     epochthreshs = [5, 15, 30, 50]
-    # epochthreshs = [0, 5]
+    # epochthreshs = [0,, size='xx-large' 5]
     expspath = pjoin(resdir[0], 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
     df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
@@ -478,7 +478,7 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
                                     data[data.gaussianstd==std_].recmean,
                                     yerr=data[data.gaussianstd==std_].recstd,
                                     marker='o', c=colors_[ii], label=str(std_),
-                                    alpha=0.5)
+                                    alpha=0.7)
 
             ax[i, j].legend(title='Gaussian std')
             ax[i, j].set_xlim(left=0, right=1)

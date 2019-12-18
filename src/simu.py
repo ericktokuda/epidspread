@@ -116,7 +116,7 @@ def run_one_experiment_given_list(l):
 
 #############################################################
 def generate_graph(topologymodel, nvertices, avgdegree,
-                   latticethoroidal, baoutpref, wsrewiring):
+                   latticethoroidal, baoutpref, wsrewiring, expidx):
     """Generate graph with given topology
 
     Args:
@@ -128,6 +128,7 @@ def generate_graph(topologymodel, nvertices, avgdegree,
     igraph.Graph, np.ndarray: graph and the layout
     """
 
+    info('exp:{} Generating graph with topology {}...'.format(expidx, topologymodel))
     if topologymodel == 'la':
         mapside = int(np.sqrt(nvertices))
         g = igraph.Graph.Lattice([mapside, mapside], nei=1, circular=latticethoroidal)
@@ -151,23 +152,203 @@ def generate_graph(topologymodel, nvertices, avgdegree,
     # coords = (aux - np.mean(aux, 0))/np.std(aux, 0) # standardization
     coords = -1 + 2*(aux - np.min(aux, 0))/(np.max(aux, 0)-np.min(aux, 0)) # minmax
     return g, coords
+
+##########################################################
+def copy_experiment_config(cfgdf, outjsonpath, expidx):
+    """Copy @configs 
+
+    Args:
+    cfgdf(pd.DataFrame): dataframe with the index column as field name and the
+    data column containing the value
+    expidx(int): experiment index
+    """
+    info('exp:{} Copying config file ...'.format(expidx))
+    for k in cfgdf['data'].keys():
+        cfgdf['data'][k] = [cfgdf['data'][k]]
+    cfgdf['data'].to_json(outjsonpath, force_ascii=False)
+
+##########################################################
+def generate_distribution_of_status(N, s0, i0, expidx):
+    """Generate a random distribution of status according with @s0 susceptibles
+    and @i0 infected
+
+    Args:
+    s0(int): number of susceptibles
+    i0(int): number of infected
+    expidx(int): experiment index
+
+    Returns:
+    status(np.ndarray): array with length @N and values corresponding to the status
+    """
+
+    info('exp:{} Generating random distribution of S, I, R ...'.format(expidx))
+    status = np.ndarray(N, dtype=int)
+    status[0: s0] = SUSCEPTIBLE
+    status[s0:s0+i0] = INFECTED
+    status[s0+i0:] = RECOVERED
+    np.random.shuffle(status)
+    return status
+
+def define_plot_layout(mapside, plotzoom, expidx):
+    """Establish the visual of the igraph plot
+
+    Args:
+    mapside(int): side size of the map
+    plotzoom(int): zoom of the map
+    expidx(int): experiment index
+
+    Returns:
+    dict: to be used by igraph.plot
+    """
+
+    # Square of the center surrounded by radius 3
+    #  (equiv to 99.7% of the points of a gaussian)
+    visual = dict(
+        bbox = (mapside*10*plotzoom, mapside*10*plotzoom),
+        margin = mapside*plotzoom,
+        vertex_size = 5*plotzoom,
+        vertex_shape = 'circle',
+        vertex_frame_width = 0
+    )
+    return visual
+
+##########################################################
+def distribute_agents(nvertices, nagents, expidx):
+    """Initialize the location of the agents. The nagents per vertex is random but
+    the agents id is NOT. The ids of a vertex will be all sequential
+
+    Args:
+    nvertices(int): number of vertices in the map
+    nagents(int): number of agents
+    expidx(int): experiment index
+
+    Returns:
+    list of list: each element corresponds to a vertex and contains the indices of the 
+    vertices
+    """
+
+    info('exp:{} Distributing agents in the map...'.format(expidx))
+    nparticles = np.ndarray(nvertices, dtype=int)
+    aux = np.random.rand(nvertices) # Uniform distrib
+    nparticles = np.floor(aux / np.sum(aux) *nagents).astype(int)
+
+    diff = nagents - np.sum(nparticles) # Correct rounding differences on the final number
+    for i in range(np.abs(diff)):
+        idx = np.random.randint(nvertices)
+        nparticles[idx] += np.sign(diff) # Initialize number of particles per vertex
+
+    particles = [None]*nvertices # Initialize indices of particles per vertex
+
+    particlesidx = 0
+    for i in range(nvertices):
+        particles[i] = list(range(particlesidx, particlesidx+nparticles[i]))
+        particlesidx += nparticles[i]
+
+    return particles
+
+##########################################################
+def export_map(coords, gradients, mappath, expidx):
+    """Export the map along with the gradient map
+
+    Args:
+    coords(np.ndarray(nnodes, 2)): coordinates of each node
+    gradients(np.ndarray(nnodes,)): gradient of each node
+    mappath(str): output path
+    expidx(int): experiment index
+    """
+
+    info('exp:{} Exporting relief map...'.format(expidx))
+    aux = pd.DataFrame()
+    aux['x'] = coords[:, 0]
+    aux['y'] = coords[:, 1]
+    aux['gradient'] = gradients
+    aux.to_csv(mappath, index=False, header=['x', 'y', 'gradient'])
+
+
+##########################################################
+def plot_gradients(g, outgradientspath, visual):
+    """Plot the gradients map
+
+    Args:
+    g(igraph.Graph): graph
+    outgradientspath(str): output path
+    visual(dict): parameters of the layout of the igraph plot
+    """
+
+    aux = np.sum(g.vs['gradient'])
+    gradientscolors = [ [c, c, c, plotalpha] for c in g.vs['gradient']]
+    # gradientscolors = [1, 1, 1]*g.vs['gradient']
+    gradsum = float(np.sum(g.vs['gradient']))
+    gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
+    outgradientspath = pjoin(outdir, 'gradients.png')
+    igraph.plot(g, target=outgradientspath, layout=coords.tolist(),
+                vertex_color=gradientscolors,
+                **visual)
+
+##########################################################
+def merge_all_plots(animationpath):
+    """Fork a process to generate a mosaic of the plots.
+    Requires Imagemagick to work 
+
+    Args:
+    animationpath(str): output path
+    """
+    cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
+    proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
+    stdout, stderr = proc.communicate()
+    print(stderr)
+
+##########################################################
+def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
+                     elapsed, statuscountsum, nparticlesstds, lastepoch, mobstep,
+                     ncomponents, sirplotpath, summarypath, expidx):
+    aux = pd.DataFrame(ntransmpervertex)
+    aux.to_csv(ntransmpervertexpath, index=False, header=['ntransmission'])
+
+    outdf = pd.DataFrame({
+        'transmstep': transmstep.astype(int),
+        'S': statuscountsum[:, 0],
+        'I': statuscountsum[:, 1],
+        'R': statuscountsum[:, 2],
+        'nparticlesstd': nparticlesstds
+    })
+    outdf.to_csv(ntransmpath, index=True, index_label='t')
+
+    ########################################################## Plot SIR over time
+    info('exp:{} Generating plots for counts of S, I, R'.format(expidx))
+    fig, ax = plt.subplots(1, 1)
+    plot_sir(statuscountsum[:, 0], statuscountsum[:, 1], statuscountsum[:, 2],
+             fig, ax, sirplotpath)
+
+    info('exp:{} Elapsed time: {:.2f}min'.format(expidx, elapsed/60))
+    summary = dict(
+        server = socket.gethostname(),
+        elapsed = '{:.2f}'.format(elapsed),
+        nsteps = lastepoch,
+        stepsmobility = np.sum(mobstep),
+        ncomponents = ncomponents
+    )
+    with open(summarypath, 'w') as fh:
+        fh.write(','.join(summary.keys()) + '\n')
+        fh.write(','.join(str(x) for x in summary.values()))
 ##########################################################
 def run_experiment(cfg):
-    """Main function
+    """Execute an experiment given the parameters defined in @cfg
 
     Args:
     cfg(dict): dict of parameters
     """
 
     plotalpha = .9
+    DELAYTIME = 3600
+
     t0 = time.time()
     cfgdf = pd.DataFrame.from_dict(cfg, 'index', columns=['data'])
     
     ##########################################################  Local vars
     outdir = cfg['outdir']
     nvertices = cfg['nvertices']
-    nagentspervertex   = cfg['nagentspervertex']
-    nagents   = nagentspervertex * nvertices
+    nagents   = cfg['nagentspervertex'] * nvertices
     topologymodel = cfg['topologymodel']
     avgdegree = cfg['avgdegree']
     latticethoroidal = cfg['lathoroidal']
@@ -188,13 +369,16 @@ def run_experiment(cfg):
     randomseed= cfg['randomseed']
     expidx= cfg['expidx']
 
-    DELAYTIME = 3600
-
     ########################################################## 
     outdir = pjoin(outdir, expidx)
-    transmpath = pjoin(outdir, 'transmcount.csv')
-    summarypath = pjoin(outdir, 'summary.csv')
+    ntransmpath = pjoin(outdir, 'ntransmperepoch.csv') # Stats per epoch
+    summarypath = pjoin(outdir, 'summary.csv') # General info from the run
     runningpath = pjoin(outdir, 'RUNNING') # Lock file
+    outjsonpath = pjoin(outdir, 'config.json')
+    mappath = pjoin(outdir, 'attraction.csv')
+    animationpath = pjoin(outdir, 'animation.gif')
+    ntransmpervertexpath = pjoin(outdir, 'ntransmpervertex.csv')
+    sirplotpath = pjoin(outdir, 'sir.png')
 
     if os.path.exists(summarypath):
         return
@@ -205,191 +389,89 @@ def run_experiment(cfg):
     os.makedirs(outdir, exist_ok=True) # Create outdir
     open(runningpath, 'w').write(str(time.time()))
 
-    ##########################################################
-    info('exp:{} Copying config file ...'.format(expidx))
-    kk = cfgdf['data']
-
-    for k in cfgdf['data'].keys():
-        cfgdf['data'][k] = [cfgdf['data'][k]]
-    cfgdf['data'].to_json(pjoin(outdir, 'config.json'), force_ascii=False)
+    copy_experiment_config(cfgdf, outjsonpath, expidx)
+    np.random.seed(randomseed)
 
     mapside = int(np.sqrt(nvertices))
     istoroid = latticethoroidal
-    N = s0 + i0 + r0
-    status = np.ndarray(N, dtype=int)
-    status[0: s0] = SUSCEPTIBLE
-    status[s0:s0+i0] = INFECTED
-    status[s0+i0:] = RECOVERED
-    info('exp:{} Generating random distribution of S, I, R ...'.format(cfg['expidx']))
-    np.random.shuffle(status)
 
-    visual = {}
-    visual["bbox"] = (mapside*10*cfg['plotzoom'], mapside*10*cfg['plotzoom'])
-    visual["margin"] = mapside*cfg['plotzoom']
-    visual["vertex_size"] = 5*cfg['plotzoom']
-    visual["vertex_shape"] = 'circle'
-    visual["vertex_frame_width"] = 0
+    status = generate_distribution_of_status(nagents, s0, i0, expidx)
 
-
-    statuscountsum = np.zeros((MAXITERS, 3), dtype=int)
-    statuscountsum[0, :] = np.array([s0, i0, r0])
-    transmstep = np.ones(MAXITERS, dtype=bool)
+    visual = define_plot_layout(mapside, plotzoom, expidx)
+    statuscountperepoch = np.zeros((MAXITERS, 3), dtype=int)
+    statuscountperepoch[0, :] = np.array([s0, i0, r0])
+    
+    if mobilityratio == -1: # Steps occur in parallel
+        transmstep = np.ones(MAXITERS, dtype=bool)
+        mobstep = np.ones(MAXITERS, dtype=bool)
+    else: # They occur in an interleaved way
+        transmstep = np.zeros(MAXITERS, dtype=bool)
+        mobstep = np.zeros(MAXITERS, dtype=bool)
 
 
-    # TODO: fix message
-    # aux = '' if cfg['latticethoroidal'] else 'non-'
-    # info('exp:{} Generating {}toroidal lattice with dim ({}, {}) ...'.format(expidx,
-                                                                             # aux,
-                                                                             # mapside,
-                                                                             # mapside,
-                                                                             # ))
-
-    plotarea = 36   # Square of the center surrounded by radius 3
-                    # (equiv to 99.7% of the points of a gaussian)
-
-    info('exp:{} Generating graph with topology {}...'.format(expidx, topologymodel))
-    g, coords =  generate_graph(topologymodel, nvertices, avgdegree,
-                                latticethoroidal, baoutpref, wsrewiring)
+    g, coords = generate_graph(topologymodel, nvertices, avgdegree,
+                               latticethoroidal, baoutpref, wsrewiring, expidx)
 
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
 
-    ntransmissions = np.zeros(nvertices, dtype=int)
-    ########################################################## Distrib. of particles
-    info('exp:{} Generating agents location distribution...'.format(expidx))
-    nparticles = np.ndarray(nvertices, dtype=int)
-    aux = np.random.rand(nvertices) # Uniform distrib
-    nparticles = np.floor(aux / np.sum(aux) *N).astype(int)
+    ntransmpervertex = np.zeros(nvertices, dtype=int)
 
-    diff = N - np.sum(nparticles) # Correct rounding differences on the final number
-    for i in range(np.abs(diff)):
-        idx = np.random.randint(nvertices)
-        nparticles[idx] += np.sign(diff) # Initialize number of particles per vertex
-
-    particles = [None]*nvertices # Initialize indices of particles per vertex
-    aux = 0
-    for i in range(nvertices):
-        particles[i] = list(range(aux, aux+nparticles[i]))
-        aux += nparticles[i]
+    particles = distribute_agents(nvertices, nagents, expidx)
     nparticlesstds = np.zeros((MAXITERS,), dtype=float)
 
-    ########################################################## Distrib. of gradients
-    info('exp:{} Initializing gradients distribution ...'.format(expidx))
-    g = initialize_gradients(g, coords, gaussianstd)
-    info('exp:{} Exporting relief map...'.format(expidx))
+    g = initialize_gradients(g, coords, gaussianstd, expidx)
+    export_map(coords, g.vs['gradient'], mappath, expidx)
 
-    aux = pd.DataFrame()
-
-    aux['x'] = coords[:, 0]
-    aux['y'] = coords[:, 1]
-    aux['gradient'] = g.vs['gradient']
-    aux.to_csv(pjoin(outdir, 'attraction.csv'), index=False, header=['x', 'y', 'gradient'])
-
-    ########################################################## Plot gradients
     if plotrate > 0:
-        info('exp:{} Generating plots for epoch 0'.format(expidx))
-
-        aux = np.sum(g.vs['gradient'])
-        gradientscolors = [ [c, c, c, plotalpha] for c in g.vs['gradient']]
-        # gradientscolors = [1, 1, 1]*g.vs['gradient']
-        gradsum = float(np.sum(g.vs['gradient']))
-        gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
-        outgradientspath = pjoin(outdir, 'gradients.png')
-        igraph.plot(g, target=outgradientspath, layout=coords.tolist(),
-                    vertex_color=gradientscolors,
-                    **visual)
-
-        b = 0.1 # For colors definition
-        ########################################################## Plot epoch 0
-        statuscount, _  = compute_statuses_sums(status, particles, nvertices, )
-
+        plot_gradients(g, outgradientspath, visual)
+        statuscountpervertex, _  = sum_status_per_vertex(status, particles, nvertices, )
         visual["edge_width"] = 0.0
 
     maxepoch = nepochs if nepochs > 0 else MAX
-    steps_mobility = 0
-    if mobilityratio == -1: transmstep[0] = -1
-    else: transmstep[0] = 0
+    transmstep[0] = 0; mobstep[0] = 0 # Nobody either move or transmit in epoch 0
 
     for ep in range(1, maxepoch):
         lastepoch = ep
 
         if plotrate > 0 and ep % plotrate == 0:
             plot_epoch_graphs(ep-1, g, coords, visual, status, nvertices, particles,
-                              N, b, outgradientspath,
-                              statuscount[:, 0], statuscount[:, 1], statuscount[:, 2],
-                              outdir)
+                              N, outgradientspath,
+                              statuscountpervertex[:, 0], statuscountpervertex[:, 1], statuscountpervertex[:, 2],
+                              outdir, expidx)
 
-        if ep % 10 == 0:
-            info('exp:{}, t:{}'.format(expidx, ep))
+        if ep % 10 == 0: info('exp:{}, t:{}'.format(expidx, ep))
 
         nparticlesstds[ep] = np.std([len(x) for x in particles])
+
         if mobilityratio == -1 or np.random.random() < mobilityratio:
             particles = step_mobility(g, particles, nagents)
+            if mobilityratio != -1: # If interleaved steps
+                statuscountperepoch[ep, :] = statuscountperepoch[ep-1, :] # Keep the prev. ep value
+                mobstep[ep] = 1
+                continue # Do NOT transmit in this step
 
-            steps_mobility += 1
-            statuscountsum[ep, :] = statuscountsum[ep-1, :]
-            transmstep[ep] = 0
-
-            if mobilityratio != -1:
-                transmstep[ep] = -1
-                continue
-
-        status, newtransmissions = step_transmission(g.vcount(), status, beta, gamma, particles)
+        transmstep[ep] = 1
+        status, newtransm = step_transmission(nvertices, status, beta, gamma, particles)
         status = np.asarray(status)
-        ntransmissions += newtransmissions
+        ntransmpervertex += newtransm
       
-        statuscount, distsum  = compute_statuses_sums(status, particles, nvertices)
-        statuscountsum[ep, :] = distsum
+        statuscountpervertex = sum_status_per_vertex(status, particles, nvertices)
+        statuscountperepoch[ep, :] = np.sum(statuscountpervertex, 0)
 
         if nepochs == -1 and np.sum(status==INFECTED) == 0: break
 
+    if plotrate > 0: merge_all_plots(animationpath)
 
-    ########################################################## Enhance plots
-    if plotrate > 0:
-        animationpath = pjoin(outdir, 'animation.gif')
-        cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
-        proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
-        stdout, stderr = proc.communicate()
-        print(stderr)
-
-    statuscountsum = statuscountsum[:lastepoch+1, :]
+    statuscountperepoch = statuscountperepoch[:lastepoch+1, :]
     transmstep = transmstep[:lastepoch+1]
     nparticlesstds = nparticlesstds[:lastepoch+1]
-    ########################################################## Export to csv
-    aux = pd.DataFrame(ntransmissions)
-    aux.to_csv(pjoin(outdir, 'ntranmissions.csv'), index=False, header=['ntransmission'])
-    ########################################################## Export to csv
-    info('exp:{} Exporting S, I, R data'.format(expidx))
-    outdf = pd.DataFrame({
-        'transmstep': transmstep.astype(int),
-        'S': statuscountsum[:, 0],
-        'I': statuscountsum[:, 1],
-        'R': statuscountsum[:, 2],
-        'nparticlesstd': nparticlesstds
-    })
-    outdf.to_csv(transmpath, index=True, index_label='t')
-
-    ########################################################## Plot SIR over time
-    info('exp:{} Generating plots for counts of S, I, R'.format(expidx))
-    fig, ax = plt.subplots(1, 1)
-    plot_sir(statuscountsum[:, 0], statuscountsum[:, 1], statuscountsum[:, 2],
-             fig, ax, outdir)
 
     elapsed = time.time() - t0
-    info('exp:{} Elapsed time: {:.2f}min'.format(expidx, elapsed/60))
-    summary = dict(
-        server = socket.gethostname(),
-        elapsed = '{:.2f}'.format(elapsed),
-        nsteps = lastepoch,
-        stepsmobility = steps_mobility,
-        ncomponents = len(g.components())
-    )
-    with open(summarypath, 'w') as fh:
-        fh.write(','.join(summary.keys()) + '\n')
-        fh.write(','.join(str(x) for x in summary.values()))
 
-    # summarydf = pd.DataFrame(summary)
-    # with open(elapsedpath, 'w') as fh: fh.write(str(elapsed))
-    # summarydf.to_csv(summarypath)
+    export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
+                     elapsed, statuscountperepoch, nparticlesstds, lastepoch, mobstep,
+                     len(g.components()), sirplotpath, summarypath, expidx)
+
     os.remove(runningpath) # Remove lock
     info('exp:{} Finished. Results are in {}'.format(expidx, outdir))
 
@@ -488,7 +570,7 @@ k
     return g
 
 ##########################################################
-def initialize_gradients(g, coords, sigma=1):
+def initialize_gradients(g, coords, sigma, expidx):
     """Initialize gradients with some distribution
 
     Args:
@@ -499,6 +581,7 @@ def initialize_gradients(g, coords, sigma=1):
     """
 
 
+    info('exp:{} Initializing gradients distribution ...'.format(expidx))
     # if method == 'uniform':
         # g.vs['gradient'] = 0.1
         # return g
@@ -510,7 +593,7 @@ def initialize_gradients(g, coords, sigma=1):
     return initialize_gradients_gaussian(g, coords, mu, cov)
 
 ##########################################################
-def compute_statuses_sums(status, particles, nvertices, nclasses=3):
+def sum_status_per_vertex(status, particles, nvertices, nclasses=3):
     """Compute the sum of each status
 
     Args:
@@ -520,23 +603,20 @@ def compute_statuses_sums(status, particles, nvertices, nclasses=3):
     totalnsusceptibles(int): number of vertices of the map
 
     Returns:
-    nsusceptibles(list of int): number of susceptibles per vertex
-    ninfected(list of int): number of infected per vertex
+    dist(np.ndarray(nvertices, 3)): number of susceptibles, infected and recovered per vertex
     nrecovered(list of int): number of recovered per vertex
     """
 
-
     dist = np.zeros((nvertices, 3))
     for i in range(nvertices):
-        x = np.bincount(status[particles[i]], minlength=nclasses)
-        dist[i, :] = x
+        dist[i, :] = np.bincount(status[particles[i]], minlength=nclasses)
 
-    sums = np.sum(dist, 0)
-    return dist, np.sum(dist, 0)
+    return dist
 ##########################################################
 def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
-                      N, b, outgradientspath, nsusceptibles, ninfected, nrecovered,
-                      outdir, plotalpha=.9):
+                      N, outgradientspath, nsusceptibles, ninfected, nrecovered,
+                      outdir, expidx, plotalpha=.9):
+    info('exp:{} Generating plots'.format(expidx))
     susceptiblecolor = []
     infectedcolor = []
     recoveredcolor = []
@@ -580,12 +660,12 @@ def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
     stdout, stderr = proc.communicate()
 
 ##########################################################
-def plot_sir(s, i, r, fig, ax, outdir):
+def plot_sir(s, i, r, fig, ax, sirpath):
     ax.plot(s, 'g', label='Susceptibles')
     ax.plot(i, 'r', label='Infected')
     ax.plot(r, 'b', label='Recovered')
     ax.legend()
-    fig.savefig(pjoin(outdir, 'sir.png'))
+    fig.savefig(sirpath)
 
 def random_string(length=8):
     """Generate a random string of fixed length """
@@ -593,6 +673,8 @@ def random_string(length=8):
     return ''.join(np.random.choice(letters, size=length))
 
 def generate_params_combinations(origcfg):
+    """Generate a random string of fixed length. It is dependent on the order of
+    the columns in the dataframe"""
     cfg = origcfg.copy()
     cfg.lathoroidal = [-1]
     cfg.baoutpref = [-1]
@@ -685,6 +767,40 @@ def prepend_random_ids_columns(df):
     return df
 
 ##########################################################
+def get_experiments_table(configpath, expspath):
+    """Merge requested experiments from @configpath and already executed ones
+    (@expspath)
+
+    Args:
+    configpath(str): path to the config file in json format
+    expspath(str): path to the exps file in csv format
+
+    Returns:
+    pd.DataFrame: merged experiments directives
+    """
+    configdf = load_df_from_json(configpath)
+    cols = configdf.columns.tolist()
+    if not 'expidx' in configdf.columns:
+        configdf = prepend_random_ids_columns(configdf)
+    configdf.set_index('expidx')
+    expsdf = configdf
+    if os.path.exists(expspath):
+        try:
+            aux2 = cols.copy()
+            loadeddf = pd.read_csv(expspath)
+            aux = pd.concat([loadeddf, configdf], sort=False)
+            aux2.remove('outdir')
+            aux2.remove('nprocs')
+            expsdf = aux.drop_duplicates(aux2, keep='first')
+            expsdf = expsdf.assign(outdir = cfg.outdir[0])
+            expsdf = expsdf.assign(nprocs = cfg.nprocs[0])
+            os.rename(expspath, expspath.replace('exps.csv', 'exps_orig.csv'))
+        except:
+            expsdf = configdf
+    return expsdf
+
+
+##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('config', help='Config file')
@@ -700,7 +816,6 @@ def main():
 
     outdir = cfg.outdir[0]
 
-    # info('Files will be generated in {}/...'.format(outdir))
     existing = os.path.exists(outdir)
 
     if existing and not args.continue_:
@@ -712,51 +827,10 @@ def main():
     cfg.outdir = [outdir]
 
     expspath = pjoin(outdir, 'exps.csv')
-
-    configdf = load_df_from_json(cfg)
-    cols = configdf.columns.tolist()
-    if not 'expidx' in configdf.columns:
-        configdf = prepend_random_ids_columns(configdf)
-    configdf.set_index('expidx')
-
-    # types_ = dict(
-        # nvertices=int,
-        # avgdegree=int,
-        # lathoroidal=int,
-        # baoutpref=int,
-        # wsrewiring=float,
-        # nepochs=int,
-        # mobilityratio=float,
-        # s0=float,
-        # i0=float,
-        # r0=float,
-        # beta=float,
-        # gamma=float,
-        # ngaussians=int,
-        # gaussianstd=float,
-        # plotzoom=int,
-        # plotrate=int,
-        # randomseed=int
-    # )
-
-    expsdf = configdf
-    if os.path.exists(expspath):
-        try:
-            aux2 = cols.copy()
-            loadeddf = pd.read_csv(expspath)
-            aux = pd.concat([loadeddf, configdf], sort=False)
-            aux2.remove('outdir')
-            aux2.remove('nprocs')
-            expsdf = aux.drop_duplicates(aux2, keep='first')
-            expsdf = expsdf.assign(outdir = cfg.outdir[0])
-            expsdf = expsdf.assign(nprocs = cfg.nprocs[0])
-            os.rename(expspath, expspath.replace('exps.csv', 'exps_orig.csv'))
-        except:
-            expsdf = configdf
-
+    expsdf = get_experiments_table(cfg, expspath)
     expsdf.drop(columns=['outdir', 'nprocs']).to_csv(expspath, index=False)
-
     params = expsdf.to_dict(orient='records')
+
     if args.shuffle: np.random.shuffle(params)
 
     if cfg.nprocs[0] == 1:
