@@ -782,22 +782,22 @@ def get_experiments_table(configpath, expspath):
     cols = configdf.columns.tolist()
     if not 'expidx' in configdf.columns:
         configdf = prepend_random_ids_columns(configdf)
-    configdf.set_index('expidx')
     expsdf = configdf
     if os.path.exists(expspath):
         try:
-            aux2 = cols.copy()
             loadeddf = pd.read_csv(expspath)
-            aux = pd.concat([loadeddf, configdf], sort=False)
-            aux2.remove('outdir')
-            aux2.remove('nprocs')
-            expsdf = aux.drop_duplicates(aux2, keep='first')
-            expsdf = expsdf.assign(outdir = cfg.outdir[0])
-            expsdf = expsdf.assign(nprocs = cfg.nprocs[0])
-            os.rename(expspath, expspath.replace('exps.csv', 'exps_orig.csv'))
-        except:
+            aux = pd.concat([loadeddf, configdf], sort=False, ignore_index=True)
+            cols.remove('outdir')
+            cols.remove('nprocs')
+            expsdf = aux.drop_duplicates(cols, keep='first')
+            expsdf = expsdf.assign(outdir = configdf.outdir[0])
+            expsdf = expsdf.assign(nprocs = configdf.nprocs[0])
+        except Exception as e:
+            info('Error occurred when merging exps')
+            info(e)
             expsdf = configdf
-    return expsdf
+    expsdf.set_index('expidx')
+    return expsdf, len(configdf) != len(expsdf)
 
 
 ##########################################################
@@ -827,8 +827,14 @@ def main():
     cfg.outdir = [outdir]
 
     expspath = pjoin(outdir, 'exps.csv')
-    expsdf = get_experiments_table(cfg, expspath)
-    expsdf.drop(columns=['outdir', 'nprocs']).to_csv(expspath, index=False)
+    expsdf, rewriteexps = get_experiments_table(cfg, expspath)
+
+    if os.path.exists(expspath) and rewriteexps:
+        os.rename(expspath, expspath.replace('exps.csv', 'exps_orig.csv'))
+
+    if not os.path.exists(expspath) or rewriteexps:
+        expsdf.drop(columns=['outdir', 'nprocs']).to_csv(expspath, index=False)
+
     params = expsdf.to_dict(orient='records')
 
     if args.shuffle: np.random.shuffle(params)
