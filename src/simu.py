@@ -464,6 +464,7 @@ def run_experiment(cfg):
 
     statuscountperepoch = statuscountperepoch[:lastepoch+1, :]
     transmstep = transmstep[:lastepoch+1]
+    mobstep = mobstep[:lastepoch+1]
     nparticlesstds = nparticlesstds[:lastepoch+1]
 
     elapsed = time.time() - t0
