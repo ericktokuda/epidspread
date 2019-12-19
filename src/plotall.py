@@ -233,19 +233,30 @@ def plot_pca(resdir, outdir):
     # input(df.lathoroidal)
     # input(type(df.lathoroidal))
 
-    df_sorted = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
+    df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
     # plt.tight_layout(pad=2.5, h_pad=3.0, w_pad=0.5)
-    # input(np.unique(df_sorted.gaussianstd))
-    # print('Filtering by avgdegree=16')
-    # df_sorted = df_sorted[df_sorted.avgdegree == 16]
-    print('Filtering by seed=0')
-    df_sorted = df_sorted[df_sorted.randomseed == 0]
-    print('Filtering by thoroidal=-1 or thoroidal=0')
-    df_sorted = df_sorted[(df_sorted.lathoroidal == -1) | (df_sorted.lathoroidal == 0)]
-    print('Filtering by gamma=0.75')
-    df_sorted = df_sorted[(df_sorted.gamma == 0.75)]
+    # input(np.unique(df.gaussianstd))
+    print('Filtering by nagentspervertex=1')
+    df = df[(df.nagentspervertex == 1)]
 
-    for j, expidx in enumerate(df_sorted.index):
+    print('Filtering by avgdegree=16')
+    df = df[df.avgdegree == 16]
+
+    print('Filtering by thoroidal=-1 or thoroidal=0')
+    df = df[(df.lathoroidal == -1) | (df.lathoroidal == 0)]
+
+    print('Filtering by wsrewiring=0.0001')
+    df = df[(df.wsrewiring == 0.0001)]
+
+    print('Filtering by mobilityratio=-1')
+    df = df[(df.mobilityratio == -1)]
+
+    print('Filtering by gamma=0.75')
+    df = df[(df.gamma == 0.75)]
+    print('Filtering by seed=0')
+    df = df[df.randomseed == 0]
+
+    for j, expidx in enumerate(df.index):
         if not os.path.isdir(pjoin(resdir[0], expidx)): continue
         summarypath = pjoin(resdir[0], expidx, 'transmcount.csv')
         aux = pd.read_csv(summarypath)
@@ -268,14 +279,14 @@ def plot_pca(resdir, outdir):
         # imode = np.argmax(aux.I)
         imode = aux.I.idxmax()
 
-        df_sorted.loc[expidx, 't'] = nrows
-        df_sorted.loc[expidx, 'iequals'] = i_equal_s
-        df_sorted.loc[expidx, 'requals'] = r_equal_s
-        df_sorted.loc[expidx, 'requali'] = r_equal_i
-        df_sorted.loc[expidx, 'imax'] = imax
-        df_sorted.loc[expidx, 'imode'] = imode
+        df.loc[expidx, 't'] = nrows
+        df.loc[expidx, 'iequals'] = i_equal_s
+        df.loc[expidx, 'requals'] = r_equal_s
+        df.loc[expidx, 'requali'] = r_equal_i
+        df.loc[expidx, 'imax'] = imax
+        df.loc[expidx, 'imode'] = imode
 
-    X_orig = df_sorted[['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree', 't', 'iequals', 'requals', 'requali', 'imax', 'imode']]
+    X_orig = df[['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree', 't', 'iequals', 'requals', 'requali', 'imax', 'imode']]
     print(X_orig)
     import copy
     X = copy.copy(X_orig)
@@ -361,7 +372,7 @@ def plot_pca(resdir, outdir):
 ##########################################################
 def filter_exps_df(df, nagentspervertex=None, avgdegree=None, lathoroidal=None,
                    wsrewiring=None, mobilityratio=None, gamma=None):
-    df = df[(df.avgdegree == avgdegree)]
+    df = df[(df.nagentspervertex == nagentspervertex)]
     info('Filtering by nagentspervertex:{} resulted in {} rows'.format(nagentspervertex,
                                                                  df.shape[0]))
 
@@ -369,11 +380,11 @@ def filter_exps_df(df, nagentspervertex=None, avgdegree=None, lathoroidal=None,
     info('Filtering by avgdegree:{} resulted in {} rows'.format(avgdegree,
                                                                  df.shape[0]))
 
-    df = df[(df.lathoroidal < 1)]
-    info('Filtering by lathoroidal<{} resulted in {} rows'.format(lathoroidal,
+    df = df[(df.lathoroidal == -1) | (df.lathoroidal == 0) ]
+    info('Filtering by lathoroidal:{} resulted in {} rows'.format(lathoroidal,
                                                                  df.shape[0]))
 
-    df = df[(df.wsrewiring == wsrewiring)]
+    df = df[(df.wsrewiring == -1) | (df.wsrewiring == 0.0001) ]
     info('Filtering by wsrewiring:{} resulted in {} rows'.format(wsrewiring,
                                                                  df.shape[0]))
 
@@ -389,7 +400,7 @@ def filter_exps_df(df, nagentspervertex=None, avgdegree=None, lathoroidal=None,
 def plot_recoveredrate_vs_beta(resdir, outdir):
     nagentspervertex = 1
     avgdegree = 16
-    lathoroidal = 1
+    lathoroidal = -1
     wsrewiring = 0.0001
     mobilityratio = -1.0
     gamma = 0.2
@@ -437,13 +448,12 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
                     recoveredratios = []
 
                     for expidx in aux3.index:
-                        if not os.path.exists(pjoin(resdir[0], expidx, 'transmcount.csv')):
+                        if not os.path.exists(pjoin(resdir[0], expidx, 'summary.csv')):
                             continue
 
                         valid.append(expidx)
 
-                        summarypath = pjoin(resdir[0], expidx, 'transmcount.csv')
-                        aux4 = pd.read_csv(summarypath)
+                        aux4 = pd.read_csv(pjoin(resdir[0], expidx, 'ntransmperepoch.csv'))
 
                         n = float(aux4.iloc[0].S + aux4.iloc[0].I + aux4.iloc[0].R )
                         # print(n)
