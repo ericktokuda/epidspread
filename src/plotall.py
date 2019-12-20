@@ -404,8 +404,6 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
     wsrewiring = 0.0001
     mobilityratio = -1.0
     gamma = 0.2
-    epochthreshs = [5, 15, 30, 50]
-    # epochthreshs = [0,, size='xx-large' 5]
     expspath = pjoin(resdir[0], 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
     df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
@@ -419,83 +417,68 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
     betas = np.unique(df.beta)
     stds = np.unique(df.gaussianstd)
 
-    fig, ax = plt.subplots(len(epochthreshs), 4, figsize=(24, 6*len(epochthreshs)))
+    fig, ax = plt.subplots(1, 4, figsize=(24, 6))
 
-    for a, col in zip(ax[0], [str(t).upper() for t in tops]):
+    for a, col in zip(ax, [str(t).upper() for t in tops]):
         a.set_title(col, size='x-large')
 
-    for a, row in zip(ax[:,0], ['t:' + str(e) for e in epochthreshs]):
-        a.set_ylabel(row, rotation=0, size='x-large')
+    cols = ['topologymodel', 'beta', 'gaussianstd', 'recmean', 'recstd']
 
-    for i, epoch in enumerate(epochthreshs):
-        charti = 0
-        cols = ['topologymodel', 'beta', 'gaussianstd', 'recmean', 'recstd']
+    for j, top in enumerate(tops):
+        datadict = {k: [] for k in cols}
+        aux = df[df.topologymodel == top]
 
-        for j, top in enumerate(tops):
-            datadict = {k: [] for k in cols}
-            aux = df[df.topologymodel == top]
+        valid = [] # filtering incomplete execution
 
-            valid = [] # filtering incomplete execution
+        for b in betas:
+            aux2 = aux[aux.beta == b]
 
-            for b in betas:
-                aux2 = aux[aux.beta == b]
+            for std_ in stds:
+                aux3 = aux2[aux2.gaussianstd == std_]
 
-                for std_ in stds:
-                    aux3 = aux2[aux2.gaussianstd == std_]
-                    # input(aux3.shape)
+                nruns = aux3.shape[0]
+                recoveredratios = []
 
-                    nruns = aux3.shape[0]
-                    recoveredratios = []
+                for expidx in aux3.index:
+                    if not os.path.exists(pjoin(resdir[0], expidx, 'summary.csv')):
+                        continue
 
-                    for expidx in aux3.index:
-                        if not os.path.exists(pjoin(resdir[0], expidx, 'summary.csv')):
-                            continue
+                    valid.append(expidx)
 
-                        valid.append(expidx)
+                    aux4 = pd.read_csv(pjoin(resdir[0], expidx, 'ntransmperepoch.csv'))
+                    n = float(aux4.iloc[0].S + aux4.iloc[0].I + aux4.iloc[0].R )
+                    r = aux4.iloc[-1].R / n
+                    recoveredratios.append(r)
 
-                        aux4 = pd.read_csv(pjoin(resdir[0], expidx, 'ntransmperepoch.csv'))
+                #append row
+                datadict['topologymodel'].append(top)
+                datadict['beta'].append(b)
+                datadict['gaussianstd'].append(std_)
+                datadict['recmean'].append(np.mean(recoveredratios))
+                datadict['recstd'].append(np.std(recoveredratios))
+        
+        data = pd.DataFrame.from_dict(datadict)
 
-                        n = float(aux4.iloc[0].S + aux4.iloc[0].I + aux4.iloc[0].R )
-                        # print(n)
+        # Generating colormap
+        categories = np.unique(data.gaussianstd)
+        colors = np.linspace(0, 1, len(categories))
+        colordict = dict(zip(categories, colors))
+        mycmap = aux.gaussianstd.apply(lambda x: colordict[x])
 
-                        if aux4.shape[0] <= epoch: # did not last threshepochs
-                            r = aux4.iloc[-1].R / n
-                        else:
-                            r = aux4.iloc[epoch].R / n
+        colors_ = ['#7fc97f','#beaed4','#fdc086','#ffff99',
+                   '#386cb0','#f0027f','#bf5b17','#666666']
 
-                        recoveredratios.append(r)
+        for ii, std_ in enumerate(stds):
+            ax[j].plot(data[data.gaussianstd==std_].beta,
+                       data[data.gaussianstd==std_].recmean,
+                       # yerr=data[data.gaussianstd==std_].recstd,
+                       marker='o', c=colors_[ii], label=str(std_),
+                       alpha=0.75)
 
-                    #append row
-                    datadict['topologymodel'].append(top)
-                    datadict['beta'].append(b)
-                    datadict['gaussianstd'].append(std_)
-                    datadict['recmean'].append(np.mean(recoveredratios))
-                    datadict['recstd'].append(np.std(recoveredratios))
-            
-            data = pd.DataFrame.from_dict(datadict)
-
-            # Generating colormap
-            categories = np.unique(data.gaussianstd)
-            colors = np.linspace(0, 1, len(categories))
-            colordict = dict(zip(categories, colors))
-            mycmap = aux.gaussianstd.apply(lambda x: colordict[x])
-
-            colors_ = ['#7fc97f','#beaed4','#fdc086','#ffff99',
-                       '#386cb0','#f0027f','#bf5b17','#666666']
-
-            for ii, std_ in enumerate(stds):
-                ax[i, j].errorbar(data[data.gaussianstd==std_].beta,
-                                    data[data.gaussianstd==std_].recmean,
-                                    yerr=data[data.gaussianstd==std_].recstd,
-                                    marker='o', c=colors_[ii], label=str(std_),
-                                    alpha=0.7)
-
-            ax[i, j].legend(title='Gaussian std')
-            ax[i, j].set_xlim(left=0, right=1)
-            # ax[i, j].set_ylim(bottom=0, top=1)
-            # ax[i, j].set_yscale('log')
-    fig.suptitle('Recovered ratio vs beta', size='xx-large')
-    plt.tight_layout()
+        ax[j].legend(title='Gaussian std')
+        ax[j].set_xlim(left=0, right=1)
+        ax[j].set_ylim(bottom=0, top=1)
+    fig.suptitle('Recovered ratio vs Contagion rate', size='xx-large')
     plt.savefig(pjoin(outdir, '{}.pdf'.format('out')))
 
 ##########################################################
