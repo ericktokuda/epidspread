@@ -403,12 +403,12 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
     lathoroidal = -1
     wsrewiring = 0.0001
     mobilityratio = -1.0
-    gamma = 0.2
+    gamma = 0.4
     expspath = pjoin(resdir[0], 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
     df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
 
-    filter_exps_df(df, nagentspervertex=nagentspervertex, avgdegree=avgdegree,
+    df = filter_exps_df(df, nagentspervertex=nagentspervertex, avgdegree=avgdegree,
                    lathoroidal=lathoroidal, wsrewiring=wsrewiring,
                    mobilityratio=mobilityratio, gamma=gamma)
 
@@ -423,6 +423,7 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
         a.set_title(col, size='x-large')
 
     cols = ['topologymodel', 'beta', 'gaussianstd', 'recmean', 'recstd']
+    # print(np.mean(df.recmean))
 
     for j, top in enumerate(tops):
         datadict = {k: [] for k in cols}
@@ -479,7 +480,7 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
         ax[j].set_xlim(left=0, right=1)
         ax[j].set_ylim(bottom=0, top=1)
     fig.suptitle('Recovered ratio vs Contagion rate', size='xx-large')
-    plt.savefig(pjoin(outdir, '{}.pdf'.format('out')))
+    plt.savefig(pjoin(outdir, '{}.pdf'.format(gamma)))
 
 ##########################################################
 def main():
