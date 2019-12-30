@@ -781,8 +781,10 @@ def get_experiments_table(configpath, expspath):
     """
     configdf = load_df_from_json(configpath)
     cols = configdf.columns.tolist()
+
     if not 'expidx' in configdf.columns:
         configdf = prepend_random_ids_columns(configdf)
+
     expsdf = configdf
     if os.path.exists(expspath):
         try:
@@ -798,7 +800,7 @@ def get_experiments_table(configpath, expspath):
             info(e)
             expsdf = configdf
     expsdf.set_index('expidx')
-    return expsdf, len(configdf) != len(expsdf)
+    return expsdf, len(loadeddf) != len(expsdf)
 
 
 ##########################################################
