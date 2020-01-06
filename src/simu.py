@@ -384,7 +384,9 @@ def run_experiment(cfg):
         return
     elif os.path.exists(runningpath):
         startedtime = float(open(runningpath).read().strip())
-        if (time.time() - startedtime) < DELAYTIME: return
+        if (time.time() - startedtime) < DELAYTIME:
+            info('Skipping {} (recently started)'.format(expidx))
+            return
 
     os.makedirs(outdir, exist_ok=True) # Create outdir
     open(runningpath, 'w').write(str(time.time()))
@@ -800,7 +802,9 @@ def get_experiments_table(configpath, expspath):
             info(e)
             expsdf = configdf
     expsdf.set_index('expidx')
-    return expsdf, len(loadeddf) != len(expsdf)
+    if not os.path.exists(expspath) or len(loadeddf) != len(expsdf): rewriteexps = True
+    else: rewriteexps = False
+    return expsdf, rewriteexps
 
 
 ##########################################################
