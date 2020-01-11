@@ -25,6 +25,8 @@ from subprocess import Popen, PIPE
 from datetime import datetime
 from multiprocessing import Pool
 import pickle as pkl
+import scipy
+import scipy.optimize
 # import torch
 from optimized import step_mobility, step_transmission
 
@@ -114,6 +116,24 @@ def generate_lattice(n, thoroidal=False, s=10):
 def run_one_experiment_given_list(l):
     run_experiment(l)
 
+def get_optimal_radius(nvertices, avgdegree):
+    radiuscatalog = {
+        '625,6': 0.056865545,
+        '10000,6': 0.0139,
+        '250000,6': 0.00277,
+    }
+
+    if '{},{}'.format(nvertices, avgdegree) in radiuscatalog.keys():
+        return radiuscatalog['{},{}'.format(nvertices, avgdegree)]
+
+    def f(r):
+        g = igraph.Graph.GRG(nvertices, r)
+        return np.mean(g.degree()) - avgdegree
+
+    a = 0.0001
+    b = 1
+    return scipy.optimize.brentq(f, a, b)
+
 #############################################################
 def generate_graph(topologymodel, nvertices, avgdegree,
                    latticethoroidal, baoutpref, wsrewiring, expidx):
@@ -132,23 +152,32 @@ def generate_graph(topologymodel, nvertices, avgdegree,
     if topologymodel == 'la':
         mapside = int(np.sqrt(nvertices))
         g = igraph.Graph.Lattice([mapside, mapside], nei=1, circular=latticethoroidal)
-        layout = g.layout('grid')
+        # layout = g.layout('grid')
     elif topologymodel == 'er':
         erdosprob = avgdegree / nvertices
         if erdosprob > 1: erdosprob = 1
         g = igraph.Graph.Erdos_Renyi(nvertices, erdosprob)
-        layout = g.layout('fr')
+        # layout = g.layout('fr')
     elif topologymodel == 'ba':
         m = round(avgdegree/2)
         if m == 0: m = 1
         g = igraph.Graph.Barabasi(nvertices, m)
-        layout = g.layout('fr')
+        # layout = g.layout('fr')
     elif topologymodel == 'ws':
+        mapside = int(np.sqrt(nvertices))
         m = round(avgdegree/2)
-        g = igraph.Graph.Watts_Strogatz(1, nvertices, m, wsrewiring)
-        layout = g.layout('fr')
+        g = igraph.Graph.Lattice([mapside, mapside], nei=1,
+                                 circular=False)
+        g.rewire_edges(wsrewiring)
+        # layout = g.layout('fr')
+    elif topologymodel == 'gr':
+        radius = get_optimal_radius(nvertices, avgdegree)
+        g = igraph.Graph.GRG(nvertices, radius)
+        # layout = g.layout('fr')
 
-    aux = np.array(layout.coords)
+    layoutmodel = 'grid' if topologymodel == 'la' else 'fr'
+    g = g.clusters().giant()
+    aux = np.array(g.layout(layoutmodel).coords)
     # coords = (aux - np.mean(aux, 0))/np.std(aux, 0) # standardization
     coords = -1 + 2*(aux - np.min(aux, 0))/(np.max(aux, 0)-np.min(aux, 0)) # minmax
     return g, coords
@@ -322,7 +351,7 @@ def merge_all_plots(outdir, animationpath):
 ##########################################################
 def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountsum, nparticlesstds, lastepoch, mobstep,
-                     ncomponents, sirplotpath, summarypath, expidx):
+                     ncomponents, nvertices, sirplotpath, summarypath, expidx):
     aux = pd.DataFrame(ntransmpervertex)
     aux.to_csv(ntransmpervertexpath, index=False, header=['ntransmission'])
 
@@ -347,7 +376,8 @@ def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransm
         elapsed = '{:.2f}'.format(elapsed),
         nsteps = lastepoch,
         stepsmobility = np.sum(mobstep),
-        ncomponents = ncomponents
+        ncomponents = ncomponents,
+        nvertices = nvertices
     )
     with open(summarypath, 'w') as fh:
         fh.write(','.join(summary.keys()) + '\n')
@@ -369,7 +399,7 @@ def run_experiment(cfg):
     ##########################################################  Local vars
     outdir = cfg['outdir']
     nvertices = cfg['nvertices']
-    nagents   = cfg['nagentspervertex'] * nvertices
+    # nagents   = cfg['nagentspervertex'] * nvertices
     topologymodel = cfg['topologymodel']
     avgdegree = cfg['avgdegree']
     latticethoroidal = cfg['lathoroidal']
@@ -377,9 +407,9 @@ def run_experiment(cfg):
     wsrewiring = cfg['wsrewiring']
     mobilityratio   = cfg['mobilityratio']
     nepochs   = cfg['nepochs']
-    s0        = int(nagents*cfg['s0'])
-    r0        = int(nagents*cfg['r0'])
-    i0        = nagents - s0 - r0 # To sum up nagents
+    # s0        = int(nagents*cfg['s0'])
+    # r0        = int(nagents*cfg['r0'])
+    # i0        = nagents - s0 - r0 # To sum up nagents
     beta      = cfg['beta']
     gamma     = cfg['gamma']
     ngaussians = cfg['ngaussians']
@@ -420,11 +450,8 @@ def run_experiment(cfg):
     mapside = int(np.sqrt(nvertices))
     istoroid = latticethoroidal
 
-    status = generate_distribution_of_status(nagents, s0, i0, expidx)
 
     visual = define_plot_layout(mapside, plotzoom, expidx)
-    statuscountperepoch = np.zeros((MAXITERS, 3), dtype=int)
-    statuscountperepoch[0, :] = np.array([s0, i0, r0])
     
     if mobilityratio == -1: # Steps occur in parallel
         transmstep = np.ones(MAXITERS, dtype=bool)
@@ -436,6 +463,16 @@ def run_experiment(cfg):
 
     g, coords = generate_graph(topologymodel, nvertices, avgdegree,
                                latticethoroidal, baoutpref, wsrewiring, expidx)
+    nvertices = g.vcount()
+
+    nagents   = cfg['nagentspervertex'] * nvertices
+    s0        = int(nagents*cfg['s0'])
+    r0        = int(nagents*cfg['r0'])
+    i0        = nagents - s0 - r0 # To sum up nagents
+
+    status = generate_distribution_of_status(nagents, s0, i0, expidx)
+    statuscountperepoch = np.zeros((MAXITERS, 3), dtype=int)
+    statuscountperepoch[0, :] = np.array([s0, i0, r0])
 
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
 
@@ -497,7 +534,7 @@ def run_experiment(cfg):
 
     export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountperepoch, nparticlesstds, lastepoch, mobstep,
-                     len(g.components()), sirplotpath, summarypath, expidx)
+                     len(g.components()), g.vcount(), sirplotpath, summarypath, expidx)
 
     os.remove(runningpath) # Remove lock
     info('exp:{} Finished. Results are in {}'.format(expidx, outdir))
@@ -679,11 +716,11 @@ def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
                 vertex_color=recoveredcolor, **visual)
 
     outconcatpath = pjoin(outdir, 'concat{:02d}.png'.format(ep))
-    proc = Popen('convert {} {} {} +append {}'.format(outsusceptiblepath,
+    cmd_ = 'convert {} {} {} +append {}'.format(outsusceptiblepath,
                                                          outinfectedpath,
                                                          outrecoveredpath,
-                                                         outconcatpath),
-                 shell=True, stdout=PIPE, stderr=PIPE)
+                                                         outconcatpath)
+    proc = Popen(cmd_, shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
 
     # Delete individual files
@@ -738,6 +775,11 @@ def generate_params_combinations(origcfg):
         aux = cfg.copy()
         aux.topologymodel = ['ws']
         aux['wsrewiring'] = origcfg.wsrewiring
+        params += list(product(*aux))
+
+    if 'gr' in cfg.topologymodel:
+        aux = cfg.copy()
+        aux.topologymodel = ['gr']
         params += list(product(*aux))
 
     return params
