@@ -336,18 +336,32 @@ def plot_topology(g, coords, toprasterpath, visualorig, plotalpha):
     igraph.plot(g, target=toprasterpath, layout=coords.tolist(),
                 vertex_color=gradientscolors, **visual)
 ##########################################################
-def merge_all_plots(outdir, animationpath):
+def generate_plots_animation(outdir, animationpath):
     """Fork a process to generate a mosaic of the plots.
-    Requires Imagemagick to work 
+    Requires ffmpeg to work 
 
     Args:
     animationpath(str): output path
     """
-    cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
+    # cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
+    cmd = "nohup /usr/bin/ffmpeg -framerate 1 -pattern_type glob -i '{}/concat*.png'   -c:v libx264 -r 30 -pix_fmt yuv420p {} 2>&1 >/dev/null".format(outdir, animationpath)
+    print(cmd)
     proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
     print(stderr)
 
+def delete_individual_frames(outdir):
+    """Delete individual frames
+
+    Args:
+    outdir(str): output path
+    """
+    # cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
+    cmd = "rm {}/concat*.png".format(outdir)
+    print(cmd)
+    proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
+    stdout, stderr = proc.communicate()
+    print(stderr)
 ##########################################################
 def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountsum, nparticlesstds, lastepoch, mobstep,
@@ -427,7 +441,7 @@ def run_experiment(cfg):
     runningpath = pjoin(outdir, 'RUNNING') # Lock file
     outjsonpath = pjoin(outdir, 'config.json')
     mappath = pjoin(outdir, 'attraction.csv')
-    animationpath = pjoin(outdir, 'animation.gif')
+    animationpath = pjoin(outdir, 'animation.mp4')
     ntransmpervertexpath = pjoin(outdir, 'ntransmpervertex.csv')
     gradsrasterpath = pjoin(outdir, 'gradients.png')
     toporasterpath = pjoin(outdir, 'topology.png')
@@ -523,7 +537,9 @@ def run_experiment(cfg):
 
         if nepochs == -1 and np.sum(status==INFECTED) == 0: break
 
-    # if plotrate > 0: merge_all_plots(outdir, animationpath)
+    if plotrate > 0 and os.path.exists('/usr/bin/ffmpeg'):
+            generate_plots_animation(outdir, animationpath)
+            delete_individual_frames(outdir)
 
     statuscountperepoch = statuscountperepoch[:lastepoch+1, :]
     transmstep = transmstep[:lastepoch+1]
@@ -716,11 +732,11 @@ def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
                 vertex_color=recoveredcolor, **visual)
 
     outconcatpath = pjoin(outdir, 'concat{:02d}.png'.format(ep))
-    cmd_ = 'convert {} {} {} +append {}'.format(outsusceptiblepath,
+    proc = Popen('convert {} {} {} +append {}'.format(outsusceptiblepath,
                                                          outinfectedpath,
                                                          outrecoveredpath,
-                                                         outconcatpath)
-    proc = Popen(cmd_, shell=True, stdout=PIPE, stderr=PIPE)
+                                                         outconcatpath),
+                 shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
 
     # Delete individual files
