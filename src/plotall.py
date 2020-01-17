@@ -133,9 +133,11 @@ def filter_exps_df(df, nagentspervertex=None, avgdegree=None, lathoroidal=None,
     info('Filtering by lathoroidal:{} resulted in {} rows'.format(lathoroidal,
                                                                  df.shape[0]))
 
-    df = df[(df.wsrewiring == -1) | (df.wsrewiring == 0.0001) ]
+    print(np.unique(df.topologymodel))
+    df = df[(df.wsrewiring == -1) | (df.wsrewiring == wsrewiring) ]
     info('Filtering by wsrewiring:{} resulted in {} rows'.format(wsrewiring,
                                                                  df.shape[0]))
+    print(np.unique(df.topologymodel))
 
     df = df[(df.mobilityratio == mobilityratio)]
     info('Filtering by mobilityratio:{} resulted in {} rows'.format(mobilityratio,
@@ -146,33 +148,39 @@ def filter_exps_df(df, nagentspervertex=None, avgdegree=None, lathoroidal=None,
     return df
 
 ##########################################################
-def plot_recoveredrate_vs_beta(resdir, outdir):
-    nagentspervertex = 1
-    avgdegree = 16
-    lathoroidal = -1
-    wsrewiring = 0.0001
-    mobilityratio = -1.0
-    gamma = 0.3
+def plot_recoveredrate_vs_beta_gammas(resdir, outdir):
+    # gamma = 0.3
     expspath = pjoin(resdir[0], 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
     df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
+    gammas = np.unique(df.gamma)
+    for g in gammas:
+        plot_recoveredrate_vs_beta(resdir, g, outdir)
 
+def plot_recoveredrate_vs_beta(resdir, gamma, outdir):
+    nagentspervertex = 1
+    avgdegree = 6
+    lathoroidal = -1
+    wsrewiring = 0.001
+    mobilityratio = -1.0
+
+    expspath = pjoin(resdir[0], 'exps.csv')
+    df = pd.read_csv(expspath, index_col='expidx')
+    df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
     df = filter_exps_df(df, nagentspervertex=nagentspervertex, avgdegree=avgdegree,
                    lathoroidal=lathoroidal, wsrewiring=wsrewiring,
                    mobilityratio=mobilityratio, gamma=gamma)
-
 
     tops = np.unique(df.topologymodel)
     betas = np.unique(df.beta)
     stds = np.unique(df.gaussianstd)
 
-    fig, ax = plt.subplots(1, 4, figsize=(24, 6))
+    fig, ax = plt.subplots(1, 5, figsize=(30, 6))
 
     for a, col in zip(ax, [str(t).upper() for t in tops]):
         a.set_title(col, size='x-large')
 
     cols = ['topologymodel', 'beta', 'gaussianstd', 'recmean', 'recstd']
-    # print(np.mean(df.recmean))
 
     for j, top in enumerate(tops):
         datadict = {k: [] for k in cols}
@@ -219,17 +227,35 @@ def plot_recoveredrate_vs_beta(resdir, outdir):
                    '#386cb0','#f0027f','#bf5b17','#666666']
 
         for ii, std_ in enumerate(stds):
-            ax[j].plot(data[data.gaussianstd==std_].beta,
+            ax[j].errorbar(data[data.gaussianstd==std_].beta,
                        data[data.gaussianstd==std_].recmean,
-                       # yerr=data[data.gaussianstd==std_].recstd,
+                       yerr=data[data.gaussianstd==std_].recstd,
                        marker='o', c=colors_[ii], label=str(std_),
                        alpha=0.75)
 
         ax[j].legend(title='Gaussian std')
         ax[j].set_xlim(left=0, right=1)
         ax[j].set_ylim(bottom=0, top=1)
-    fig.suptitle('Recovered ratio vs Contagion rate', size='xx-large')
+    fig.suptitle('Total infected ratio vs Contagion rate', size='xx-large')
     plt.savefig(pjoin(outdir, '{}.pdf'.format(gamma)))
+
+def plot_attraction(attractionpath, outpath='/tmp/attraction.pdf'):
+    """Plot map of attraction according to the @attractionpath csv file
+
+    Args:
+    attractionpath(str): path to the csv file
+    """
+    import numpy as np
+    from mpl_toolkits.mplot3d import Axes3D
+    import matplotlib.pyplot as plt
+    from matplotlib import cm
+    import pandas as pd
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    df = pd.read_csv(attractionpath)
+    ax.plot_trisurf(df.x.values, df.y.values, df.gradient.values, cmap=cm.coolwarm,)
+    plt.savefig(outpath)
 
 ##########################################################
 def main():
@@ -246,7 +272,8 @@ def main():
     # plot_sir_all(args.resdir, outdir)
     # plot_measures_luc(args.resdir, outdir)
     # plot_pca(args.resdir, outdir)
-    plot_recoveredrate_vs_beta(args.resdir, outdir)
+    plot_recoveredrate_vs_beta_gammas(args.resdir, outdir)
+    # plot_attraction('/tmp/del/aw0otrky/attraction.csv')
 
 if __name__ == "__main__":
     main()
