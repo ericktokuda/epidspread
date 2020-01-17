@@ -14,6 +14,7 @@ import time
 
 import string
 import igraph
+import networkx as nx
 import numpy as np
 import pandas as pd
 import copy
@@ -116,7 +117,7 @@ def generate_lattice(n, thoroidal=False, s=10):
 def run_one_experiment_given_list(l):
     run_experiment(l)
 
-def get_optimal_radius(nvertices, avgdegree):
+def get_rgg_params(nvertices, avgdegree):
     radiuscatalog = {
         '625,6': 0.056865545,
         '10000,6': 0.0139,
@@ -133,6 +134,25 @@ def get_optimal_radius(nvertices, avgdegree):
     a = 0.0001
     b = 1
     return scipy.optimize.brentq(f, a, b)
+
+def get_waxman_params(nvertices, avgdegree):
+    radiuscatalog = {
+        '625,6': .01385,
+    }
+
+    if '{},{}'.format(nvertices, avgdegree) in radiuscatalog.keys():
+        return radiuscatalog['{},{}'.format(nvertices, avgdegree)]
+
+    print('0:{}'.format(0))
+    alpha = 1
+    def f(b):
+        g = nx.generators.geometric.waxman_graph(nvertices, beta=b, alpha=alpha)
+        return np.mean(list(dict(g.degree()).values())) - avgdegree
+
+    a = 0
+    b = 2
+    print('1:{}'.format(1))
+    return scipy.optimize.brentq(f, a, b), 1
 
 #############################################################
 def generate_graph(topologymodel, nvertices, avgdegree,
@@ -167,12 +187,26 @@ def generate_graph(topologymodel, nvertices, avgdegree,
                                  circular=False)
         g.rewire_edges(wsrewiring)
     elif topologymodel == 'gr':
-        radius = get_optimal_radius(nvertices, avgdegree)
+        radius = get_rgg_params(nvertices, avgdegree)
         g = igraph.Graph.GRG(nvertices, radius)
+    elif topologymodel == 'wx':
+        beta, alpha = get_waxman_params(nvertices, avgdegree)
+        print(beta)
+        input()
+        g = nx.generators.geometric.waxman_graph(nvertices, beta=beta, alpha=alpha)
+        pos = nx.get_node_attributes(g, 'pos')
+
+        for node, (x,y) in pos.items(): 
+            print(node, x, y) 
+            g.nodes[node]['x'] = float(x) 
+            g.nodes[node]['y'] = float(y) 
+            g.nodes[node].pop('pos', None) 
+        nx.write_graphml(g,'/tmp/del.graphml')
+        g = igraph.read('/tmp/del.graphml', format="graphml")
 
     g = g.clusters().giant()
 
-    if topologymodel in ['gr']:
+    if topologymodel in ['gr', 'wx']:
         aux = np.array([ [g.vs['x'][i], g.vs['y'][i]] for i in range(g.vcount()) ])
         # layoutmodel = 'grid'
     else:
@@ -665,7 +699,7 @@ def initialize_gradients(g, coords, ngaussians, sigma, expidx):
 
 
     info('exp:{} Initializing gradients distribution ...'.format(expidx))
-    if ngaussians == 0 or sigma > 999:
+    if ngaussians == 0 or sigma > 998:
         g.vs['gradient'] = 0.1
         return g
 
@@ -798,6 +832,11 @@ def generate_params_combinations(origcfg):
         aux.topologymodel = ['gr']
         params += list(product(*aux))
 
+    if 'wx' in cfg.topologymodel:
+        aux = cfg.copy()
+        aux.topologymodel = ['wx']
+        params += list(product(*aux))
+
     return params
 
 def convert_list_to_df(mylist):
@@ -880,6 +919,7 @@ def get_experiments_table(configpath, expspath):
     expsdf = configdf
     if os.path.exists(expspath):
         try:
+            # print('0:{}'.format(0))
             loadeddf = pd.read_csv(expspath)
             aux = pd.concat([loadeddf, configdf], sort=False, ignore_index=True)
             cols.remove('outdir')
@@ -888,9 +928,12 @@ def get_experiments_table(configpath, expspath):
             expsdf = expsdf.assign(outdir = configdf.outdir[0])
             expsdf = expsdf.assign(nprocs = configdf.nprocs[0])
         except Exception as e:
+            # print('1:{}'.format(1))
             info('Error occurred when merging exps')
             info(e)
             expsdf = configdf
+    # print('2:{}'.format(2))
+    # print('expsdf:{}'.format(expsdf))
     expsdf.set_index('expidx')
     if not os.path.exists(expspath) or len(loadeddf) != len(expsdf): rewriteexps = True
     else: rewriteexps = False
