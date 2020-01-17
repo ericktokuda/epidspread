@@ -152,32 +152,35 @@ def generate_graph(topologymodel, nvertices, avgdegree,
     if topologymodel == 'la':
         mapside = int(np.sqrt(nvertices))
         g = igraph.Graph.Lattice([mapside, mapside], nei=1, circular=latticethoroidal)
-        # layout = g.layout('grid')
     elif topologymodel == 'er':
         erdosprob = avgdegree / nvertices
         if erdosprob > 1: erdosprob = 1
         g = igraph.Graph.Erdos_Renyi(nvertices, erdosprob)
-        # layout = g.layout('fr')
     elif topologymodel == 'ba':
         m = round(avgdegree/2)
         if m == 0: m = 1
         g = igraph.Graph.Barabasi(nvertices, m)
-        # layout = g.layout('fr')
     elif topologymodel == 'ws':
         mapside = int(np.sqrt(nvertices))
         m = round(avgdegree/2)
         g = igraph.Graph.Lattice([mapside, mapside], nei=1,
                                  circular=False)
         g.rewire_edges(wsrewiring)
-        # layout = g.layout('fr')
     elif topologymodel == 'gr':
         radius = get_optimal_radius(nvertices, avgdegree)
         g = igraph.Graph.GRG(nvertices, radius)
-        # layout = g.layout('fr')
 
-    layoutmodel = 'grid' if topologymodel == 'la' else 'fr'
     g = g.clusters().giant()
-    aux = np.array(g.layout(layoutmodel).coords)
+
+    if topologymodel in ['gr']:
+        aux = np.array([ [g.vs['x'][i], g.vs['y'][i]] for i in range(g.vcount()) ])
+        # layoutmodel = 'grid'
+    else:
+        if topologymodel in ['la', 'ws']:
+            layoutmodel = 'grid'
+        else:
+            layoutmodel = 'fr'
+        aux = np.array(g.layout(layoutmodel).coords)
     # coords = (aux - np.mean(aux, 0))/np.std(aux, 0) # standardization
     coords = -1 + 2*(aux - np.min(aux, 0))/(np.max(aux, 0)-np.min(aux, 0)) # minmax
     return g, coords
@@ -495,7 +498,7 @@ def run_experiment(cfg):
     particles = distribute_agents(nvertices, nagents, expidx)
     nparticlesstds = np.zeros((MAXITERS,), dtype=float)
 
-    g = initialize_gradients(g, coords, gaussianstd, expidx)
+    g = initialize_gradients(g, coords, ngaussians, gaussianstd, expidx)
     export_map(coords, g.vs['gradient'], mappath, expidx)
 
     if plotrate > 0:
@@ -650,7 +653,7 @@ k
     return g
 
 ##########################################################
-def initialize_gradients(g, coords, sigma, expidx):
+def initialize_gradients(g, coords, ngaussians, sigma, expidx):
     """Initialize gradients with some distribution
 
     Args:
@@ -662,16 +665,13 @@ def initialize_gradients(g, coords, sigma, expidx):
 
 
     info('exp:{} Initializing gradients distribution ...'.format(expidx))
-    # if method == 'uniform':
-        # g.vs['gradient'] = 0.1
-        # return g
-    # if method == 'peak':
-        # return initialize_gradients_peak(g)
-    # elif method == 'gaussian':
+    if ngaussians == 0 or sigma > 999:
+        g.vs['gradient'] = 0.1
+        return g
 
     # mu = (np.max(coords, 0) + np.min(coords, 0)) / 2
-
     mu = np.random.rand(2) * 2 - 0.9999 # Not 1 because rand includes 0
+
     cov = np.eye(2) * sigma
     return initialize_gradients_gaussian(g, coords, mu, cov)
 
@@ -902,7 +902,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('config', help='Config file')
     parser.add_argument('--continue_', action='store_true', help='Continue execution')
-    parser.add_argument('--shuffle', action='store_true', help='Shuffled traversing of config parameters')
+    parser.add_argument('--shuffle', action='store_true',
+                        help='Shuffled traversing of config parameters')
     parser.add_argument('--usedhashes', default=None, help='Already used hashes')
     args = parser.parse_args()
 
