@@ -121,7 +121,7 @@ def get_rgg_params(nvertices, avgdegree):
     radiuscatalog = {
         '625,6': 0.056865545,
         '10000,6': 0.0139,
-        '250000,6': 0.00277,
+        '22500,6': 0.00925,
     }
 
     if '{},{}'.format(nvertices, avgdegree) in radiuscatalog.keys():
@@ -138,25 +138,26 @@ def get_rgg_params(nvertices, avgdegree):
 def get_waxman_params(nvertices, avgdegree):
     radiuscatalog = {
         '625,6': .01385,
+        '22500,6': 0.000422,
     }
 
     if '{},{}'.format(nvertices, avgdegree) in radiuscatalog.keys():
         return radiuscatalog['{},{}'.format(nvertices, avgdegree)]
 
-    print('0:{}'.format(0))
     alpha = 1
     def f(b):
-        g = nx.generators.geometric.waxman_graph(nvertices, beta=b, alpha=alpha)
+        g = nx.generators.geometric.waxman_graph(nvertices, beta=b,
+                                                 alpha=alpha, L=1)
         return np.mean(list(dict(g.degree()).values())) - avgdegree
 
     a = 0
-    b = 2
-    print('1:{}'.format(1))
+    b = 1
     return scipy.optimize.brentq(f, a, b), 1
 
 #############################################################
 def generate_graph(topologymodel, nvertices, avgdegree,
-                   latticethoroidal, baoutpref, wsrewiring, expidx):
+                   latticethoroidal, baoutpref, wsrewiring, expidx,
+                   randomseed, tmpdir):
     """Generate graph with given topology
 
     Args:
@@ -190,19 +191,20 @@ def generate_graph(topologymodel, nvertices, avgdegree,
         radius = get_rgg_params(nvertices, avgdegree)
         g = igraph.Graph.GRG(nvertices, radius)
     elif topologymodel == 'wx':
-        beta, alpha = get_waxman_params(nvertices, avgdegree)
-        print(beta)
-        input()
-        g = nx.generators.geometric.waxman_graph(nvertices, beta=beta, alpha=alpha)
-        pos = nx.get_node_attributes(g, 'pos')
+        bufpath = pjoin(tmpdir,
+                        'waxman_{:02d}.graphml'.format(randomseed))
+        if not os.path.exists(bufpath):
+            beta, alpha = get_waxman_params(nvertices, avgdegree)
+            g = nx.generators.geometric.waxman_graph(nvertices, beta=beta,
+                                                     alpha=alpha, L=1)
+            pos = nx.get_node_attributes(g, 'pos')
 
-        for node, (x,y) in pos.items(): 
-            print(node, x, y) 
-            g.nodes[node]['x'] = float(x) 
-            g.nodes[node]['y'] = float(y) 
-            g.nodes[node].pop('pos', None) 
-        nx.write_graphml(g,'/tmp/del.graphml')
-        g = igraph.read('/tmp/del.graphml', format="graphml")
+            for node, (x,y) in pos.items():
+                g.nodes[node]['x'] = float(x)
+                g.nodes[node]['y'] = float(y)
+                g.nodes[node].pop('pos', None)
+            nx.write_graphml(g, bufpath)
+        g = igraph.read(bufpath, format="graphml")
 
     g = g.clusters().giant()
 
@@ -513,7 +515,8 @@ def run_experiment(cfg):
 
 
     g, coords = generate_graph(topologymodel, nvertices, avgdegree,
-                               latticethoroidal, baoutpref, wsrewiring, expidx)
+                               latticethoroidal, baoutpref, wsrewiring,
+                               expidx, randomseed, cfg['outdir'])
     nvertices = g.vcount()
 
     nagents   = cfg['nagentspervertex'] * nvertices
