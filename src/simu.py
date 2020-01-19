@@ -136,15 +136,17 @@ def get_rgg_params(nvertices, avgdegree):
     return scipy.optimize.brentq(f, a, b)
 
 def get_waxman_params(nvertices, avgdegree):
+    alpha = 1
+
     radiuscatalog = {
-        '625,6': .01385,
+        '625,6': .01518,
         '22500,6': 0.000422,
     }
 
-    if '{},{}'.format(nvertices, avgdegree) in radiuscatalog.keys():
-        return radiuscatalog['{},{}'.format(nvertices, avgdegree)]
+    k = '{},{}'.format(nvertices, avgdegree)
+    if k in radiuscatalog.keys():
+        return radiuscatalog[k], alpha
 
-    alpha = 1
     def f(b):
         g = nx.generators.geometric.waxman_graph(nvertices, beta=b,
                                                  alpha=alpha, L=1)
@@ -152,7 +154,8 @@ def get_waxman_params(nvertices, avgdegree):
 
     a = 0
     b = 1
-    return scipy.optimize.brentq(f, a, b), 1
+    beta = scipy.optimize.brentq(f, a, b)
+    return beta, 1
 
 #############################################################
 def generate_graph(topologymodel, nvertices, avgdegree,
@@ -205,6 +208,7 @@ def generate_graph(topologymodel, nvertices, avgdegree,
                 g.nodes[node].pop('pos', None)
             nx.write_graphml(g, bufpath)
         g = igraph.read(bufpath, format="graphml")
+        # print(np.mean(g.degree()))
 
     g = g.clusters().giant()
 
