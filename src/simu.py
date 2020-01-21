@@ -14,13 +14,12 @@ import time
 
 import string
 import igraph
-import networkx as nx
+# import networkx as nx
 import numpy as np
 import pandas as pd
 import copy
-from matplotlib import cm
+# from matplotlib import cm
 from matplotlib import pyplot as plt
-from mpl_toolkits import mplot3d
 import math
 from subprocess import Popen, PIPE
 from datetime import datetime
@@ -29,8 +28,7 @@ import pickle as pkl
 import scipy
 import scipy.optimize
 # import torch
-from optimized import step_mobility, step_transmission
-
+from optimized import step_mobility, step_transmission, generate_waxman_adj
 
 ########################################################## Defines
 SUSCEPTIBLE = 0
@@ -131,16 +129,27 @@ def get_rgg_params(nvertices, avgdegree):
         g = igraph.Graph.GRG(nvertices, r)
         return np.mean(g.degree()) - avgdegree
 
-    a = 0.0001
-    b = 1
+    a = 0.00001
+    b = 1000
     return scipy.optimize.brentq(f, a, b)
 
+def generate_waxman(n, maxnedges, alpha, beta, domain=(0, 0, 1, 1)):
+    adjlist, x, y = generate_waxman_adj(n, maxnedges, alpha, beta,
+                                        domain[0], domain[1], domain[2], domain[3])
+    adjlist = adjlist.astype(int).tolist()
+
+    g = igraph.Graph(n, adjlist)
+    g.vs['x'] = x
+    g.vs['y'] = y
+    return g
+
 def get_waxman_params(nvertices, avgdegree):
-    alpha = 1
+    alpha = 10
+    maxnedges = nvertices * nvertices // 2
 
     radiuscatalog = {
-        '625,6': .01518,
-        '22500,6': 0.000422,
+        '625,6': 0.01158,
+        '22500,6': 0.00189,
     }
 
     k = '{},{}'.format(nvertices, avgdegree)
@@ -148,14 +157,13 @@ def get_waxman_params(nvertices, avgdegree):
         return radiuscatalog[k], alpha
 
     def f(b):
-        g = nx.generators.geometric.waxman_graph(nvertices, beta=b,
-                                                 alpha=alpha, L=1)
-        return np.mean(list(dict(g.degree()).values())) - avgdegree
+        g = generate_waxman(nvertices, maxnedges, alpha=alpha, beta=b)
+        return np.mean(g.degree()) - avgdegree
 
-    a = 0
-    b = 1
-    beta = scipy.optimize.brentq(f, a, b)
-    return beta, 1
+    b1 = 0.001
+    b2 = 10
+    beta = scipy.optimize.brentq(f, b1, b2, xtol=0.00001, rtol=0.01)
+    return beta, alpha
 
 #############################################################
 def generate_graph(topologymodel, nvertices, avgdegree,
@@ -194,21 +202,16 @@ def generate_graph(topologymodel, nvertices, avgdegree,
         radius = get_rgg_params(nvertices, avgdegree)
         g = igraph.Graph.GRG(nvertices, radius)
     elif topologymodel == 'wx':
-        bufpath = pjoin(tmpdir,
-                        'waxman_{:02d}.graphml'.format(randomseed))
-        if not os.path.exists(bufpath):
+        bufwaxmanpath = pjoin(tmpdir, 'waxman_{:02d}.pkl'.format(randomseed))
+        if os.path.exists(bufwaxmanpath):
+            with open(bufwaxmanpath, 'rb') as fh:
+                g = pkl.load(fh)
+        else:
             beta, alpha = get_waxman_params(nvertices, avgdegree)
-            g = nx.generators.geometric.waxman_graph(nvertices, beta=beta,
-                                                     alpha=alpha, L=1)
-            pos = nx.get_node_attributes(g, 'pos')
-
-            for node, (x,y) in pos.items():
-                g.nodes[node]['x'] = float(x)
-                g.nodes[node]['y'] = float(y)
-                g.nodes[node].pop('pos', None)
-            nx.write_graphml(g, bufpath)
-        g = igraph.read(bufpath, format="graphml")
-        # print(np.mean(g.degree()))
+            maxnedges = nvertices * nvertices // 2
+            g = generate_waxman(nvertices, maxnedges, beta=beta, alpha=alpha)
+            with open(bufwaxmanpath, 'wb') as fh:
+                pkl.dump(g, fh)
 
     g = g.clusters().giant()
 
@@ -219,10 +222,12 @@ def generate_graph(topologymodel, nvertices, avgdegree,
         if topologymodel in ['la', 'ws']:
             layoutmodel = 'grid'
         else:
-            layoutmodel = 'fr'
+            layoutmodel = 'random'
         aux = np.array(g.layout(layoutmodel).coords)
     # coords = (aux - np.mean(aux, 0))/np.std(aux, 0) # standardization
     coords = -1 + 2*(aux - np.min(aux, 0))/(np.max(aux, 0)-np.min(aux, 0)) # minmax
+    # print('average_path_length:{}'.format(g.average_path_length()))
+    # input('avgdegree:{}'.format(np.mean(g.degree())))
     return g, coords
 
 ##########################################################
@@ -284,7 +289,6 @@ def define_plot_layout(mapside, plotzoom, expidx):
         vertex_frame_width = 0.1*plotzoom,
         edge_width=1.0
     )
-    # print(0.000001*plotzoom)
     return visual
 
 ##########################################################
@@ -353,13 +357,25 @@ def plot_gradients(g, coords, gradiestsrasterpath, visualorig, plotalpha):
     visual = visualorig.copy()
     aux = np.sum(g.vs['gradient'])
     gradientscolors = [ [c, c, c, plotalpha] for c in g.vs['gradient']]
-    # gradientscolors = [1, 1, 1]*g.vs['gradient']
     gradsum = float(np.sum(g.vs['gradient']))
     gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
-    # visual['vertex_frame_width'] = 0
     visual['edge_width'] = 0
-    igraph.plot(g, target=gradiestsrasterpath, layout=coords.tolist(),
-                vertex_color=gradientscolors, **visual)
+
+    # try:
+    if True:
+        from mpl_toolkits.mplot3d import Axes3D
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot_trisurf(coords[:, 0], coords[:, 1], g.vs['gradient'], cmap='viridis',
+                        vmin=0, vmax=7,
+                        linewidth=0.0, shade=True)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        plt.savefig(gradiestsrasterpath)
+    # except:
+    else:
+        igraph.plot(g, target=gradiestsrasterpath, layout=coords.tolist(),
+                    vertex_color=gradientscolors, **visual)
 
 ##########################################################
 def plot_topology(g, coords, toprasterpath, visualorig, plotalpha):
@@ -746,19 +762,13 @@ def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
     recoveredcolor = []
 
     for z in nsusceptibles:
-        # zz = [0, math.log(z, N), 0, plotalpha] if z*N > 1 else [0, 0, 0, 1] # Bug on log(1,1)
         zz = [0, 1, 0, math.log(z, N) + 0.2] if z*N > 1 else [0, 0, 0, 0] # Bug on log(1,1)
-        # zz = [0, 1, 0, math.log(z, N)] if z*N > 1 else [0, 0, 0, 0] # Bug on log(1,1)
         susceptiblecolor.append(zz)
     for z in ninfected:
-        # if z*N > 1:
-            # print(z, N, math.log(z, N))
-        # zz = [math.log(z, N), 0, 0, plotalpha] if z*N > 1 else [0, 0, 0, 1]
         zz = [1, 0, 0, math.log(z, N) + 0.2] if z*N > 1 else [0, 0, 0, 0] # Bug on log(1,1)
         infectedcolor.append(zz)
     for z in nrecovered:
         zz = [0, 0, 1,  math.log(z, N) + 0.2] if z*N > 1 else [0, 0, 0, 0] # Bug on log(1,1)
-        # zz = [0, 0,  math.log(z, N), plotalpha] if z*N > 1 else [0, 0, 0, 1]
         recoveredcolor.append(zz)  
         
     outsusceptiblepath = pjoin(outdir, 'susceptible{:02d}.png'.format(ep))
@@ -926,7 +936,6 @@ def get_experiments_table(configpath, expspath):
     expsdf = configdf
     if os.path.exists(expspath):
         try:
-            # print('0:{}'.format(0))
             loadeddf = pd.read_csv(expspath)
             aux = pd.concat([loadeddf, configdf], sort=False, ignore_index=True)
             cols.remove('outdir')
@@ -935,12 +944,9 @@ def get_experiments_table(configpath, expspath):
             expsdf = expsdf.assign(outdir = configdf.outdir[0])
             expsdf = expsdf.assign(nprocs = configdf.nprocs[0])
         except Exception as e:
-            # print('1:{}'.format(1))
             info('Error occurred when merging exps')
             info(e)
             expsdf = configdf
-    # print('2:{}'.format(2))
-    # print('expsdf:{}'.format(expsdf))
     expsdf.set_index('expidx')
     if not os.path.exists(expspath) or len(loadeddf) != len(expsdf): rewriteexps = True
     else: rewriteexps = False
