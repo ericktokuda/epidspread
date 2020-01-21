@@ -153,4 +153,39 @@ cpdef step_transmission(long nvertices, long[:] status, double beta, double gamm
                     if acc == numnewrecovered: break
 
     return status, ntransmissions
+
 ##########################################################
+cpdef generate_waxman_adj(long n, long avgdegree, float alpha, float beta,
+                          long xmin, long ymin, long xmax, long ymax):
+
+    # cdef long maxnumvertices = n*avgdegree//2
+    cdef int maxnumvertices = n*n//2
+    cdef int[:, :] adj = np.ones((maxnumvertices, 2), dtype=np.intc)
+    cdef double[:] x = np.zeros(n, dtype=np.double)
+    cdef double[:] y = np.zeros(n, dtype=np.double)
+    cdef int u, v, nodeid, i
+    cdef double l
+
+    for nodeid in range(n):
+        x[nodeid] = xmin + ((xmax-xmin)*np.random.rand())
+        y[nodeid] = ymin + ((ymax-ymin)*np.random.rand())
+
+    l = math.sqrt((xmax-xmin)**2 + (ymax-ymin)**2)
+
+    i = 0
+    for u in range(n):
+        x1, y1 = x[u], y[u]
+        for v in range(u + 1, n):
+            x2, y2 = x[v], y[v]
+            d = math.sqrt((x1-x2)**2 + (y1-y2)**2)
+
+            if np.random.rand() < alpha * math.exp(-d/(beta*l)):
+                # adj[u, v] = 1 # just fill upper part of the matrix
+                adj[i, 0] = u
+                adj[i, 1] = v
+                i += 1
+        # if u % 10 == 0:
+            # print(u)
+    adj = adj[:i]
+    # print(adj.tolist())
+    return np.asarray(adj), np.asarray(x), np.asarray(y)
