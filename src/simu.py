@@ -203,10 +203,10 @@ def generate_graph(topologymodel, nvertices, avgdegree,
         g = igraph.Graph.GRG(nvertices, radius)
     elif topologymodel == 'wx':
         bufwaxmanpath = pjoin(tmpdir, 'waxman_{:02d}.pkl'.format(randomseed))
-        if os.path.exists(bufwaxmanpath):
+        try:
             with open(bufwaxmanpath, 'rb') as fh:
                 g = pkl.load(fh)
-        else:
+        except:
             beta, alpha = get_waxman_params(nvertices, avgdegree)
             maxnedges = nvertices * nvertices // 2
             g = generate_waxman(nvertices, maxnedges, beta=beta, alpha=alpha)
