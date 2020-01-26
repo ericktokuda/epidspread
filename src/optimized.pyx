@@ -179,7 +179,7 @@ cpdef generate_waxman_adj(long n, long avgdegree, float alpha, float beta,
             x2, y2 = x[v], y[v]
             d = math.sqrt((x1-x2)**2 + (y1-y2)**2)
 
-            if np.random.rand() < alpha * math.exp(-d/(beta*l)):
+            if np.random.rand() < beta * math.exp(-(d/l)*(1/alpha)):
                 # adj[u, v] = 1 # just fill upper part of the matrix
                 adj[i, 0] = u
                 adj[i, 1] = v

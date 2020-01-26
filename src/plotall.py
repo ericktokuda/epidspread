@@ -175,7 +175,7 @@ def plot_recoveredrate_vs_beta(resdir, gamma, outdir):
     betas = np.unique(df.beta)
     stds = np.unique(df.gaussianstd)
 
-    fig, ax = plt.subplots(1, 5, figsize=(30, 6))
+    fig, ax = plt.subplots(1, len(tops), figsize=(6*len(tops), 6))
 
     for a, col in zip(ax, [str(t).upper() for t in tops]):
         a.set_title(col, size='x-large')
