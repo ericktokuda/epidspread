@@ -118,7 +118,7 @@ def plot_parallel(resdir, outdir):
 
 ##########################################################
 def filter_exps_df(df, nagentspervertex=None, avgdegree=None, lathoroidal=None,
-                   wsrewiring=None, mobilityratio=None, gamma=None):
+                   wsrewiring=None, wxalpha=None, mobilityratio=None, gamma=None):
     df = df[(df.nagentspervertex == nagentspervertex)]
     info('Filtering by nagentspervertex:{} resulted in {} rows'.format(nagentspervertex,
                                                                  df.shape[0]))
@@ -133,11 +133,15 @@ def filter_exps_df(df, nagentspervertex=None, avgdegree=None, lathoroidal=None,
     info('Filtering by lathoroidal:{} resulted in {} rows'.format(lathoroidal,
                                                                  df.shape[0]))
 
-    print(np.unique(df.topologymodel))
+    # print(np.unique(df.topologymodel))
     df = df[(df.wsrewiring == -1) | (df.wsrewiring == wsrewiring) ]
     info('Filtering by wsrewiring:{} resulted in {} rows'.format(wsrewiring,
                                                                  df.shape[0]))
-    print(np.unique(df.topologymodel))
+
+    df = df[(df.wxalpha == -1) | (df.wxalpha == wxalpha) ]
+    info('Filtering by wxalpha:{} resulted in {} rows'.format(wxalpha,
+                                                                 df.shape[0]))
+    # print(np.unique(df.topologymodel))
 
     df = df[(df.mobilityratio == mobilityratio)]
     info('Filtering by mobilityratio:{} resulted in {} rows'.format(mobilityratio,
@@ -162,13 +166,14 @@ def plot_recoveredrate_vs_beta(resdir, gamma, outdir):
     avgdegree = 6
     lathoroidal = -1
     wsrewiring = 0.001
+    wxalpha = 0.2
     mobilityratio = -1.0
 
     expspath = pjoin(resdir[0], 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
     df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
     df = filter_exps_df(df, nagentspervertex=nagentspervertex, avgdegree=avgdegree,
-                   lathoroidal=lathoroidal, wsrewiring=wsrewiring,
+                   lathoroidal=lathoroidal, wsrewiring=wsrewiring, wxalpha=wxalpha,
                    mobilityratio=mobilityratio, gamma=gamma)
 
     tops = np.unique(df.topologymodel)

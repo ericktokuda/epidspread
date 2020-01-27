@@ -201,7 +201,8 @@ def generate_graph(topologymodel, nvertices, avgdegree,
         radius = get_rgg_params(nvertices, avgdegree)
         g = igraph.Graph.GRG(nvertices, radius)
     elif topologymodel == 'wx':
-        bufwaxmanpath = pjoin(tmpdir, 'waxman_{:02d}.pkl'.format(randomseed))
+        bufwaxmanpath = pjoin(tmpdir, 'waxman_{:01.3f}_{:02d}.pkl'.\
+                              format(wxalpha,randomseed))
         try:
             with open(bufwaxmanpath, 'rb') as fh:
                 g = pkl.load(fh)
