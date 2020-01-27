@@ -213,7 +213,6 @@ def generate_graph(topologymodel, nvertices, avgdegree,
                 pkl.dump(g, fh)
 
     g = g.clusters().giant()
-    print(np.mean(g.degree()), g.vcount(), beta, alpha)
 
     if topologymodel in ['gr', 'wx']:
         aux = np.array([ [g.vs['x'][i], g.vs['y'][i]] for i in range(g.vcount()) ])
