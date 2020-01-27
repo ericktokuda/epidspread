@@ -116,22 +116,20 @@ def run_one_experiment_given_list(l):
     run_experiment(l)
 
 def get_rgg_params(nvertices, avgdegree):
-    radiuscatalog = {
+    rggcatalog = {
         '625,6': 0.056865545,
         '10000,6': 0.0139,
         '22500,6': 0.00925,
     }
 
-    if '{},{}'.format(nvertices, avgdegree) in radiuscatalog.keys():
-        return radiuscatalog['{},{}'.format(nvertices, avgdegree)]
+    if '{},{}'.format(nvertices, avgdegree) in rggcatalog.keys():
+        return rggcatalog['{},{}'.format(nvertices, avgdegree)]
 
     def f(r):
         g = igraph.Graph.GRG(nvertices, r)
         return np.mean(g.degree()) - avgdegree
 
-    a = 0.00001
-    b = 1000
-    return scipy.optimize.brentq(f, a, b)
+    return scipy.optimize.brentq(f, 0.0001, 10000)
 
 def generate_waxman(n, maxnedges, alpha, beta, domain=(0, 0, 1, 1)):
     adjlist, x, y = generate_waxman_adj(n, maxnedges, alpha, beta,
@@ -143,31 +141,32 @@ def generate_waxman(n, maxnedges, alpha, beta, domain=(0, 0, 1, 1)):
     g.vs['y'] = y
     return g
 
-def get_waxman_params(nvertices, avgdegree):
-    alpha = 10
+def get_waxman_params(nvertices, avgdegree, alpha):
     maxnedges = nvertices * nvertices // 2
 
-    radiuscatalog = {
-        '625,6': 0.01158,
-        '22500,6': 0.00189,
+    waxmancatalog = {
+        '625,6,0.005': 1020,
+        '625,6,0.010': 17.65,
+        '625,6,0.020': 2.12,
+        '22500,6,0.005': .86,
+        '22500,6,0.010': .22,
+        '22500,6,0.020': .057,
     }
 
-    k = '{},{}'.format(nvertices, avgdegree)
-    if k in radiuscatalog.keys():
-        return radiuscatalog[k], alpha
+    k = '{},{},{:01.3f}'.format(nvertices, avgdegree, alpha)
+    if k in waxmancatalog.keys():
+        return waxmancatalog[k], alpha
 
     def f(b):
         g = generate_waxman(nvertices, maxnedges, alpha=alpha, beta=b)
         return np.mean(g.degree()) - avgdegree
 
-    b1 = 0.001
-    b2 = 10
-    beta = scipy.optimize.brentq(f, b1, b2, xtol=0.00001, rtol=0.01)
+    beta = scipy.optimize.brentq(f, 0.0001, 1000, xtol=0.00001, rtol=0.01)
     return beta, alpha
 
 #############################################################
 def generate_graph(topologymodel, nvertices, avgdegree,
-                   latticethoroidal, baoutpref, wsrewiring, expidx,
+                   latticethoroidal, baoutpref, wsrewiring, wxalpha, expidx,
                    randomseed, tmpdir):
     """Generate graph with given topology
 
@@ -207,13 +206,14 @@ def generate_graph(topologymodel, nvertices, avgdegree,
             with open(bufwaxmanpath, 'rb') as fh:
                 g = pkl.load(fh)
         except:
-            beta, alpha = get_waxman_params(nvertices, avgdegree)
+            beta, alpha = get_waxman_params(nvertices, avgdegree, wxalpha)
             maxnedges = nvertices * nvertices // 2
             g = generate_waxman(nvertices, maxnedges, beta=beta, alpha=alpha)
             with open(bufwaxmanpath, 'wb') as fh:
                 pkl.dump(g, fh)
 
     g = g.clusters().giant()
+    print(np.mean(g.degree()), g.vcount(), beta, alpha)
 
     if topologymodel in ['gr', 'wx']:
         aux = np.array([ [g.vs['x'][i], g.vs['y'][i]] for i in range(g.vcount()) ])
@@ -478,6 +478,7 @@ def run_experiment(cfg):
     latticethoroidal = cfg['lathoroidal']
     baoutpref = cfg['baoutpref']
     wsrewiring = cfg['wsrewiring']
+    wxalpha = cfg['wxalpha']
     mobilityratio   = cfg['mobilityratio']
     nepochs   = cfg['nepochs']
     # s0        = int(nagents*cfg['s0'])
@@ -535,7 +536,7 @@ def run_experiment(cfg):
 
 
     g, coords = generate_graph(topologymodel, nvertices, avgdegree,
-                               latticethoroidal, baoutpref, wsrewiring,
+                               latticethoroidal, baoutpref, wsrewiring, wxalpha,
                                expidx, randomseed, cfg['outdir'])
     nvertices = g.vcount()
 
@@ -818,6 +819,7 @@ def generate_params_combinations(origcfg):
     cfg.lathoroidal = [-1]
     cfg.baoutpref = [-1]
     cfg.wsrewiring = [-1]
+    cfg.wxalpha = [-1]
 
     params = []
     if 'la' in cfg.topologymodel:
@@ -852,6 +854,7 @@ def generate_params_combinations(origcfg):
     if 'wx' in cfg.topologymodel:
         aux = cfg.copy()
         aux.topologymodel = ['wx']
+        aux['wxalpha'] = origcfg.wxalpha
         params += list(product(*aux))
 
     return params
