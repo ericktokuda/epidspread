@@ -145,12 +145,15 @@ def get_waxman_params(nvertices, avgdegree, alpha):
     maxnedges = nvertices * nvertices // 2
 
     waxmancatalog = {
-        '625,6,0.005': 1020,
-        '625,6,0.010': 17.65,
-        '625,6,0.020': 2.12,
-        '22500,6,0.005': .86,
-        '22500,6,0.010': .22,
-        '22500,6,0.020': .057,
+        '625,6,0.0050': 1020,
+        '625,6,0.0075': 74,
+        '625,6,0.0100': 17.65,
+        '625,6,0.0125': 8.3,
+        '625,6,0.0150': 4.47,
+        '625,6,0.0200': 2.12,
+        '22500,6,0.0050': .86,
+        '22500,6,0.0100': .22,
+        '22500,6,0.0200': .057,
     }
 
     k = '{},{},{:01.3f}'.format(nvertices, avgdegree, alpha)
@@ -424,7 +427,7 @@ def delete_individual_frames(outdir):
 ##########################################################
 def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountsum, nparticlesstds, lastepoch, mobstep,
-                     ncomponents, nvertices, sirplotpath, summarypath, expidx):
+                     ncomponents, nvertices, nedges, sirplotpath, summarypath, expidx):
     aux = pd.DataFrame(ntransmpervertex)
     aux.to_csv(ntransmpervertexpath, index=False, header=['ntransmission'])
 
@@ -450,7 +453,8 @@ def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransm
         nsteps = lastepoch,
         stepsmobility = np.sum(mobstep),
         ncomponents = ncomponents,
-        nvertices = nvertices
+        nvertices = nvertices,
+        nedges = nedges,
     )
     with open(summarypath, 'w') as fh:
         fh.write(','.join(summary.keys()) + '\n')
@@ -539,6 +543,7 @@ def run_experiment(cfg):
                                latticethoroidal, baoutpref, wsrewiring, wxalpha,
                                expidx, randomseed, cfg['outdir'])
     nvertices = g.vcount()
+    nedges = g.ecount()
 
     nagents   = cfg['nagentspervertex'] * nvertices
     s0        = int(nagents*cfg['s0'])
@@ -611,7 +616,7 @@ def run_experiment(cfg):
 
     export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountperepoch, nparticlesstds, lastepoch, mobstep,
-                     len(g.components()), g.vcount(), sirplotpath, summarypath, expidx)
+                     len(g.components()), nvertices, nedges, sirplotpath, summarypath, expidx)
 
     os.remove(runningpath) # Remove lock
     info('exp:{} Finished. Results are in {}'.format(expidx, outdir))
