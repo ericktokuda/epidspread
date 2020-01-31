@@ -28,8 +28,8 @@ def run_one_experiment(r):
     ret
     """
     time.sleep(np.random.rand()*2)
-    # nvertices = 625
-    nvertices = 22500
+    nvertices = 625
+    # nvertices = 22500
     avgdegree = 6
     maxnedges = nvertices * nvertices //2
     domain = [0, 0, 1, 1]
@@ -45,7 +45,7 @@ def run_one_experiment(r):
             fh.write('{},{}\n'.format(r, err))
         # print(r, err)
 
-    alpha = 0.005
+    alpha = 0.015
     def waxman(b):
         adjlist, x, y = generate_waxman_adj(nvertices, maxnedges, alpha, b,
                                             domain[0], domain[1], domain[2], domain[3])
@@ -87,9 +87,9 @@ def get_waxman_params(nvertices, avgdegree, alpha):
         g = generate_waxman(nvertices, maxnedges, alpha=alpha, beta=b)
         return np.mean(g.degree()) - avgdegree
 
-    b1 = 5
-    b2 = 20
-    beta = scipy.optimize.brentq(f, b1, b2, xtol=0.001, rtol=0.01)
+    b1 = 0.0001
+    b2 = 1000
+    beta = scipy.optimize.brentq(f, b1, b2, xtol=0.001, rtol=0.05)
     return beta, alpha
 
 def main():
@@ -101,14 +101,23 @@ def main():
     logging.basicConfig(format='[%(asctime)s] %(message)s',
     datefmt='%Y%m%d %H:%M', level=logging.DEBUG)
 
-    # beta, alpha = get_waxman_params(22500, 6, 0.005)
-    # print(beta, alpha)
-    # return
+
+    nvertices = 22500
+    for alpha in [0.0025,0.005,0.0075,0.01,0.0125,0.015,0.0175,0.02,0.0225,0.2]:
+        beta = []
+        for i in range(5):
+            try:
+                beta_, alpha_ = get_waxman_params(nvertices, 6, alpha)
+                beta.append(beta_)
+            except:
+                pass
+        print(alpha, len(beta), np.mean(beta), np.std(beta))
+    return
 
     n = 10
     # params = [0.00189]*n
-    params = [.7,.75,0.8,.85,.9,]
-    # params = [1010,1020,1030]
+    # params = [0.1, 0.15, 0.2, 0.25, 0.3]
+    params = [4.4, 4.5, 4.6, 4.7]
     # params = list(np.arange(0.00183, 0.00191, 0.00001))
     # print(params)
     n = len(params)
