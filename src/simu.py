@@ -161,7 +161,7 @@ def get_waxman_params(nvertices, avgdegree, alpha):
         '22500,6,0.0200': .057,
     }
 
-    k = '{},{},{:01.3f}'.format(nvertices, avgdegree, alpha)
+    k = '{},{},{:01.4f}'.format(nvertices, avgdegree, alpha)
     if k in waxmancatalog.keys():
         return waxmancatalog[k], alpha
 
