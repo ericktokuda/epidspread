@@ -141,35 +141,15 @@ def generate_waxman(n, maxnedges, alpha, beta, domain=(0, 0, 1, 1)):
     g.vs['y'] = y
     return g
 
-def get_waxman_params(nvertices, avgdegree, alpha):
+def get_waxman_params(nvertices, avgdegree, alpha, wxparamspath):
     maxnedges = nvertices * nvertices // 2
-
-    waxmancatalog = {
-        '625,6,0.0025': 3063600,
-        '625,6,0.0050': 1068.6,
-        '625,6,0.0075': 70.1,
-        '625,6,0.0100': 18.03,
-        '625,6,0.0125': 8.05,
-        '625,6,0.0150': 4.42,
-        '625,6,0.0175': 2.95,
-        '625,6,0.0200': 2.14,
-        '625,6,0.0225': 1.67,
-        '625,6,0.0250': 1.35,
-        '22500,6,0.0025': 4.105,
-        '22500,6,0.0050': .866,
-        '22500,6,0.0075': .389,
-        '22500,6,0.0100': .22,
-        '22500,6,0.0125': .142,
-        '22500,6,0.0150': .0997,
-        '22500,6,0.0175': .0739,
-        '22500,6,0.0200': .05699,
-        '22500,6,0.0225': .0455,
-        '22500,6,0.0250': .0372,
-    }
-
-    k = '{},{},{:01.4f}'.format(nvertices, avgdegree, alpha)
-    if k in waxmancatalog.keys():
-        return waxmancatalog[k], alpha
+    if os.path.exists(wxparamspath):
+        wxparams = pd.read_csv(wxparamspath)
+        row = wxparams[(wxparams.nvertices == nvertices) & \
+                       (wxparams.avgdegree == avgdegree) & \
+                       (wxparams.alpha == alpha) ]
+        if len(row) == 1:
+            return row.beta.values[0], alpha
 
     def f(b):
         g = generate_waxman(nvertices, maxnedges, alpha=alpha, beta=b)
@@ -181,7 +161,7 @@ def get_waxman_params(nvertices, avgdegree, alpha):
 #############################################################
 def generate_graph(topologymodel, nvertices, avgdegree,
                    latticethoroidal, baoutpref, wsrewiring, wxalpha, expidx,
-                   randomseed, tmpdir):
+                   randomseed, wxparamspath, tmpdir):
     """Generate graph with given topology
 
     Args:
@@ -215,13 +195,13 @@ def generate_graph(topologymodel, nvertices, avgdegree,
         radius = get_rgg_params(nvertices, avgdegree)
         g = igraph.Graph.GRG(nvertices, radius)
     elif topologymodel == 'wx':
-        bufwaxmanpath = pjoin(tmpdir, 'waxman_{:01.3f}_{:02d}.pkl'.\
+        bufwaxmanpath = pjoin(tmpdir, 'waxman_{:01.4f}_{:02d}.pkl'.\
                               format(wxalpha,randomseed))
         try:
             with open(bufwaxmanpath, 'rb') as fh:
                 g = pkl.load(fh)
         except:
-            beta, alpha = get_waxman_params(nvertices, avgdegree, wxalpha)
+            beta, alpha = get_waxman_params(nvertices, avgdegree, wxalpha, wxparamspath)
             maxnedges = nvertices * nvertices // 2
             g = generate_waxman(nvertices, maxnedges, beta=beta, alpha=alpha)
             with open(bufwaxmanpath, 'wb') as fh:
@@ -240,8 +220,6 @@ def generate_graph(topologymodel, nvertices, avgdegree,
         aux = np.array(g.layout(layoutmodel).coords)
     # coords = (aux - np.mean(aux, 0))/np.std(aux, 0) # standardization
     coords = -1 + 2*(aux - np.min(aux, 0))/(np.max(aux, 0)-np.min(aux, 0)) # minmax
-    # print('average_path_length:{}'.format(g.average_path_length()))
-    # input('avgdegree:{}'.format(np.mean(g.degree())))
     return g, coords
 
 ##########################################################
@@ -486,6 +464,7 @@ def run_experiment(cfg):
     
     ##########################################################  Local vars
     outdir = cfg['outdir']
+    wxparamspath= cfg['wxparamspath']
     nvertices = cfg['nvertices']
     # nagents   = cfg['nagentspervertex'] * nvertices
     topologymodel = cfg['topologymodel']
@@ -552,7 +531,7 @@ def run_experiment(cfg):
 
     g, coords = generate_graph(topologymodel, nvertices, avgdegree,
                                latticethoroidal, baoutpref, wsrewiring, wxalpha,
-                               expidx, randomseed, cfg['outdir'])
+                               expidx, randomseed, cfg['wxparamspath'], cfg['outdir'])
     nvertices = g.vcount()
     nedges = g.ecount()
 
@@ -949,8 +928,8 @@ def get_experiments_table(configpath, expspath):
     configdf = load_df_from_json(configpath)
     cols = configdf.columns.tolist()
 
-    if not 'expidx' in configdf.columns:
-        configdf = prepend_random_ids_columns(configdf)
+    # if not 'expidx' in configdf.columns:
+    configdf = prepend_random_ids_columns(configdf)
 
     expsdf = configdf
     if os.path.exists(expspath):
@@ -958,9 +937,11 @@ def get_experiments_table(configpath, expspath):
             loadeddf = pd.read_csv(expspath)
             aux = pd.concat([loadeddf, configdf], sort=False, ignore_index=True)
             cols.remove('outdir')
+            cols.remove('wxparamspath')
             cols.remove('nprocs')
             expsdf = aux.drop_duplicates(cols, keep='first')
             expsdf = expsdf.assign(outdir = configdf.outdir[0])
+            expsdf = expsdf.assign(wxparamspath = configdf.wxparamspath[0])
             expsdf = expsdf.assign(nprocs = configdf.nprocs[0])
         except Exception as e:
             info('Error occurred when merging exps')
