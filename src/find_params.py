@@ -19,18 +19,11 @@ from optimized import generate_waxman_adj
 
 
 def run_one_experiment(r):
-    """short-description
-
-    Args:
-    param1, param2
-
-    Returns:
-    ret
-    """
-    time.sleep(np.random.rand()*2)
     nvertices = 625
-    # nvertices = 22500
     avgdegree = 6
+    alpha = 0.0025
+
+    time.sleep(np.random.rand()*2)
     maxnedges = nvertices * nvertices //2
     domain = [0, 0, 1, 1]
     n = nvertices
@@ -45,7 +38,6 @@ def run_one_experiment(r):
             fh.write('{},{}\n'.format(r, err))
         # print(r, err)
 
-    alpha = 0.015
     def waxman(b):
         adjlist, x, y = generate_waxman_adj(nvertices, maxnedges, alpha, b,
                                             domain[0], domain[1], domain[2], domain[3])
@@ -53,14 +45,10 @@ def run_one_experiment(r):
 
         g = igraph.Graph(n, adjlist)
         err =  np.mean(g.degree()) - avgdegree
-
-        # with open('/tmp/waxman_params.csv', 'a') as fh:
-            # fh.write('{},{},{}\n'.format(r, np.mean(g.degree()), err))
         return err
 
     err = waxman(r)
     print('r:{}, err:{}'.format(r, err))
-    # rgr(r)
 
 
 def generate_waxman(n, maxnedges, alpha, beta, domain=(0, 0, 1, 1)):
@@ -88,7 +76,7 @@ def get_waxman_params(nvertices, avgdegree, alpha):
         return np.mean(g.degree()) - avgdegree
 
     b1 = 0.0001
-    b2 = 1000
+    b2 = 10000
     beta = scipy.optimize.brentq(f, b1, b2, xtol=0.001, rtol=0.05)
     return beta, alpha
 
@@ -101,11 +89,11 @@ def main():
     logging.basicConfig(format='[%(asctime)s] %(message)s',
     datefmt='%Y%m%d %H:%M', level=logging.DEBUG)
 
-
-    nvertices = 22500
-    for alpha in [0.0025,0.005,0.0075,0.01,0.0125,0.015,0.0175,0.02,0.0225,0.2]:
+    # First option
+    nvertices = 625
+    for alpha in [0.0025,0.005,0.0075,0.01,0.0125,0.015,0.0175,0.02,0.0225,0.0250]:
         beta = []
-        for i in range(5):
+        for i in range(10):
             try:
                 beta_, alpha_ = get_waxman_params(nvertices, 6, alpha)
                 beta.append(beta_)
@@ -114,21 +102,11 @@ def main():
         print(alpha, len(beta), np.mean(beta), np.std(beta))
     return
 
-    n = 10
-    # params = [0.00189]*n
-    # params = [0.1, 0.15, 0.2, 0.25, 0.3]
-    params = [4.4, 4.5, 4.6, 4.7]
-    # params = list(np.arange(0.00183, 0.00191, 0.00001))
-    # print(params)
+    # Second option
+    params = [1,2,3]
     n = len(params)
     pool = Pool(n)
     pool.map(run_one_experiment, params)
-    return
-    # df = pd.read_csv('/home/keiji/temp/grg_params.csv', header=None,
-    df = pd.read_csv('/tmp/waxman_params.csv', header=None,
-                names=['v'])
-    print(params[0], np.mean(df.v))
-    # print('checkpoint')
 
 if __name__ == "__main__":
     main()
