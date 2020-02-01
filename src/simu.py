@@ -416,7 +416,7 @@ def delete_individual_frames(outdir):
 ##########################################################
 def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountsum, nparticlesstds, lastepoch, mobstep,
-                     ncomponents, nvertices, nedges, avgpathlen, sirplotpath,
+                     ncomponents, nvertices, nedges, coordsrms, avgpathlen, sirplotpath,
                      summarypath, expidx):
     aux = pd.DataFrame(ntransmpervertex)
     aux.to_csv(ntransmpervertexpath, index=False, header=['ntransmission'])
@@ -445,6 +445,7 @@ def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransm
         ncomponents = ncomponents,
         nvertices = nvertices,
         nedges = nedges,
+        coordsrms = coordsrms,
         avgpathlen = avgpathlen,
     )
     with open(summarypath, 'w') as fh:
@@ -537,6 +538,7 @@ def run_experiment(cfg):
     nvertices = g.vcount()
     nedges = g.ecount()
     avgpathlen = g.average_path_length(directed=False, unconn=True)
+    coordsrms = np.sqrt(np.mean(np.square(coords)))
 
     nagents   = cfg['nagentspervertex'] * nvertices
     s0        = int(nagents*cfg['s0'])
@@ -609,7 +611,7 @@ def run_experiment(cfg):
 
     export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountperepoch, nparticlesstds, lastepoch, mobstep,
-                     len(g.components()), nvertices, nedges, avgpathlen,
+                     len(g.components()), nvertices, nedges, coordsrms, avgpathlen,
                      sirplotpath, summarypath, expidx)
 
     os.remove(runningpath) # Remove lock
