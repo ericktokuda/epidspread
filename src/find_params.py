@@ -75,8 +75,8 @@ def get_waxman_params(nvertices, avgdegree, alpha):
         g = generate_waxman(nvertices, maxnedges, alpha=alpha, beta=b)
         return np.mean(g.degree()) - avgdegree
 
-    b1 = 0.0001
-    b2 = 5000000
+    b1 = 0.001
+    b2 = 2
     beta = scipy.optimize.brentq(f, b1, b2, xtol=0.001, rtol=0.05)
     return beta, alpha
 
@@ -90,11 +90,13 @@ def main():
     datefmt='%Y%m%d %H:%M', level=logging.DEBUG)
 
     # First option
-    nvertices = 625
+    # nvertices = 625
+    nvertices = 22500
     avgdegree = 4
-    for alpha in [0.0025,0.005,0.0075,0.01,0.0125,0.015,0.0175,0.02,0.0225,0.0250,0.0275,0.0300,0.1,1.0]:
+    # for alpha in [0.0025,0.005,0.0075,0.01,0.0125,0.015,0.0175,0.02,0.0225,0.0250,0.0275,0.0300,0.1,0.5,1.0]:
+    for alpha in [0.275,0.003,0.1,0.5,1.0]:
         beta = []
-        for i in range(10):
+        for i in range(5):
             try:
                 beta_, alpha_ = get_waxman_params(nvertices, avgdegree, alpha)
                 beta.append(beta_)
