@@ -13,8 +13,7 @@ def create_exps_from_folders(expsdir, dffolderspath):
     files = sorted(os.listdir(expsdir))
 
     df = pd.DataFrame()
-    # for i, d in enumerate(files[:10]):
-    for i, d in enumerate(files[:100]):
+    for i, d in enumerate(files):
         dpath = pjoin(expsdir, d)
         if not os.path.isdir(dpath): continue
         expspath = pjoin(dpath, 'config.json')
