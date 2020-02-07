@@ -201,3 +201,15 @@ cpdef get_matrix_index_from_triu(int k, int n):
 cpdef get_linear_index_from_triu(int i, int j, int n):
     return int((n*(n-1)/2) - (n-i)*((n-i)-1)/2 + j - i - 1)
 
+##########################################################
+cpdef update_contacts_list(long[:] sortedids, np.uint8_t[:] contactssum, long n):
+    cdef Py_ssize_t nsusc = len(sortedids)
+    cdef Py_ssize_t i, j, first, second
+    cdef int k
+
+    for i, first in enumerate(sortedids[:nsusc-1]):
+        for j, second in enumerate(sortedids):
+            k = get_linear_index_from_triu(i, j, n)
+            contactssum[k] += 1
+    return contactssum
+    # return np.asarray(contactssum)

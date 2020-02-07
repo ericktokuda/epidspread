@@ -29,6 +29,8 @@ import scipy
 import scipy.optimize
 # import torch
 from optimized import step_mobility, step_transmission, generate_waxman_adj
+from optimized import get_matrix_index_from_triu, get_linear_index_from_triu
+from optimized import update_contacts_list
 
 ########################################################## Defines
 SUSCEPTIBLE = 0
@@ -451,6 +453,7 @@ def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransm
     with open(summarypath, 'w') as fh:
         fh.write(','.join(summary.keys()) + '\n')
         fh.write(','.join(str(x) for x in summary.values()))
+
 ##########################################################
 def run_experiment(cfg):
     """Execute an experiment given the parameters defined in @cfg
@@ -552,6 +555,7 @@ def run_experiment(cfg):
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
 
     ntransmpervertex = np.zeros(nvertices, dtype=int)
+    ncontacts_susc = np.zeros(nvertices * (nvertices - 1) // 2, dtype=np.uint8)
 
     particles = distribute_agents(nvertices, nagents, expidx)
     nparticlesstds = np.zeros((MAXITERS,), dtype=float)
@@ -571,6 +575,8 @@ def run_experiment(cfg):
     for ep in range(1, maxepoch):
         lastepoch = ep
 
+        # susceptibleids = np.where(status == SUSCEPTIBLE)[0]
+        # ncontacts_susc = update_contacts_list(susceptibleids, ncontacts_susc, nvertices)
         if plotrate > 0 and ep % plotrate == 0:
             plot_epoch_graphs(ep-1, g, coords, visual, status, nvertices, particles,
                               nagents, statuscountpervertex[:, 0],
@@ -609,6 +615,7 @@ def run_experiment(cfg):
 
     elapsed = time.time() - t0
 
+    # print(np.mean(ncontacts_susc), np.std(ncontacts_susc))
     export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountperepoch, nparticlesstds, lastepoch, mobstep,
                      len(g.components()), nvertices, nedges, coordsrms, avgpathlen,
