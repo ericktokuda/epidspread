@@ -18,6 +18,7 @@ cimport numpy as np
 # DTYPE = np.int
 # ctypedef np.int_t DTYPE_t
 # define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+from libc.math cimport floor, sqrt
 
 import pandas as pd
 import copy
@@ -189,3 +190,14 @@ cpdef generate_waxman_adj(long n, long avgdegree, float alpha, float beta,
     adj = adj[:i]
     # print(adj.tolist())
     return np.asarray(adj), np.asarray(x), np.asarray(y)
+
+##########################################################
+cpdef get_matrix_index_from_triu(int k, int n):
+    cdef double i = n - 2 - floor(sqrt(-8*k + 4*n*(n-1)-7)/2.0 - 0.5)
+    cdef double j = k + i + 1 - n*(n-1)/2 + (n-i)*((n-i)-1)/2
+    return int(i), int(j)
+
+##########################################################
+cpdef get_linear_index_from_triu(int i, int j, int n):
+    return int((n*(n-1)/2) - (n-i)*((n-i)-1)/2 + j - i - 1)
+
