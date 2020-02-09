@@ -31,7 +31,6 @@ import scipy.optimize
 from optimized import step_mobility, step_transmission, generate_waxman_adj
 from optimized import get_matrix_index_from_triu, get_linear_index_from_triu
 from optimized import update_contacts_list
-import h5py
 
 ########################################################## Defines
 SUSCEPTIBLE = 0
@@ -621,6 +620,7 @@ def run_experiment(cfg):
     elapsed = time.time() - t0
 
     if savencontacts:
+        import h5py
         hf = h5py.File(ncontactspath, 'w')
         hf.create_dataset('default', data=ncontacts_susc, compression="gzip")
         hf.close()
