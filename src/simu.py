@@ -31,6 +31,7 @@ import scipy.optimize
 from optimized import step_mobility, step_transmission, generate_waxman_adj
 from optimized import get_matrix_index_from_triu, get_linear_index_from_triu
 from optimized import update_contacts_list
+import h5py
 
 ########################################################## Defines
 SUSCEPTIBLE = 0
@@ -493,6 +494,7 @@ def run_experiment(cfg):
     nprocs    = cfg['nprocs']
     randomseed= cfg['randomseed']
     expidx= cfg['expidx']
+    savencontacts= cfg['savencontacts']
 
     ########################################################## 
     outdir = pjoin(outdir, expidx)
@@ -506,6 +508,7 @@ def run_experiment(cfg):
     gradsrasterpath = pjoin(outdir, 'gradients.png')
     toporasterpath = pjoin(outdir, 'topology.png')
     sirplotpath = pjoin(outdir, 'sir.png')
+    ncontactspath = pjoin(outdir, 'ncontacts.h5')
 
     if os.path.exists(summarypath):
         return
@@ -575,8 +578,10 @@ def run_experiment(cfg):
     for ep in range(1, maxepoch):
         lastepoch = ep
 
-        # susceptibleids = np.where(status == SUSCEPTIBLE)[0]
-        # ncontacts_susc = update_contacts_list(susceptibleids, ncontacts_susc, nvertices)
+        if savencontacts:
+            susceptibleids = np.where(status == SUSCEPTIBLE)[0]
+            ncontacts_susc = update_contacts_list(susceptibleids, ncontacts_susc,
+                                                  nvertices)
         if plotrate > 0 and ep % plotrate == 0:
             plot_epoch_graphs(ep-1, g, coords, visual, status, nvertices, particles,
                               nagents, statuscountpervertex[:, 0],
@@ -615,7 +620,11 @@ def run_experiment(cfg):
 
     elapsed = time.time() - t0
 
-    # print(np.mean(ncontacts_susc), np.std(ncontacts_susc))
+    if savencontacts:
+        hf = h5py.File(ncontactspath, 'w')
+        hf.create_dataset('default', data=ncontacts_susc, compression="gzip")
+        hf.close()
+
     export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountperepoch, nparticlesstds, lastepoch, mobstep,
                      len(g.components()), nvertices, nedges, coordsrms, avgpathlen,
@@ -973,7 +982,7 @@ def main():
     parser.add_argument('--continue_', action='store_true', help='Continue execution')
     parser.add_argument('--shuffle', action='store_true',
                         help='Shuffled traversing of config parameters')
-    parser.add_argument('--usedhashes', default=None, help='Already used hashes')
+    parser.add_argument('--ncontacts', action='store_true', help='save number of contacts')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s] %(message)s',
@@ -1003,6 +1012,8 @@ def main():
         expsdf.drop(columns=['outdir', 'nprocs']).to_csv(expspath, index=False)
 
     params = expsdf.to_dict(orient='records')
+    for p in params:
+        p['savencontacts'] = args.ncontacts
 
     if args.shuffle: np.random.shuffle(params)
 
