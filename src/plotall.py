@@ -143,57 +143,28 @@ def plot_parallel(resdir, outdir):
     plot_parallel_coordinates(expsdf, colslabels, categcols, tickslabels, outdir)
 
 ##########################################################
-def filter_exps_df(df, nagentspervertex=None, avgdegree=None, lathoroidal=None,
-                   wsrewiring=None, wxalpha=None, mobilityratio=None, gamma=None):
-
-    df = df[(df.nagentspervertex == nagentspervertex)]
-    info('Filtering by nagentspervertex:{} resulted in {} rows'.format(nagentspervertex,
-                                                                 df.shape[0]))
-
-    df = df[(df.avgdegree == avgdegree) |
-            ((df.topologymodel == 'la') & (df.avgdegree == 4))]
-    # df = df[(df.avgdegree == avgdegree)]
-    info('Filtering by avgdegree:{} (except lattice) resulted in {} rows'.format(
-        avgdegree, df.shape[0]))
-
-    df = df[(df.lathoroidal == -1) | (df.lathoroidal == 0) ]
-    info('Filtering by lathoroidal:{} resulted in {} rows'.format(lathoroidal,
-                                                                 df.shape[0]))
-
-    # print(np.unique(df.topologymodel))
-    df = df[(df.wsrewiring == -1) | (df.wsrewiring == wsrewiring) ]
-    info('Filtering by wsrewiring:{} resulted in {} rows'.format(wsrewiring,
-                                                                 df.shape[0]))
-
-    df = df[(df.wxalpha == -1) | (df.wxalpha == wxalpha) ]
-    info('Filtering by wxalpha:{} resulted in {} rows'.format(wxalpha,
-                                                                 df.shape[0]))
-    # print(np.unique(df.topologymodel))
-
-    df = df[(df.mobilityratio == mobilityratio)]
-    info('Filtering by mobilityratio:{} resulted in {} rows'.format(mobilityratio,
-                                                                 df.shape[0]))
-
-    df = df[(df.gamma == gamma)]
-    info('Filtering by gamma:{} resulted in {} rows'.format(gamma, df.shape[0]))
+def filter_exps_df(df, dffilter):
+    for k, v in dffilter.items():
+        df = df[(df[k].isin(v))]
+        info('Filtering by k:{} resulted in {} rows'.format(k, df.shape[0]))
     return df
 
 ##########################################################
-def plot_recoveredrate_vs_beta_gammas(resdir, outdir):
-    gammas = [0.5]
+def plot_recoveredrate_vs_beta_all(resdir, outdir):
     expspath = pjoin(resdir[0], 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
     df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
+    gammas = np.unique(df.gamma)
     for g in gammas:
         plot_recoveredrate_vs_beta(resdir, g, outdir)
 
+##########################################################
 def plot_recoveredrate_vs_beta(resdir, gamma, outdir):
-    nagentspervertex = 1
-    avgdegree = 6
-    lathoroidal = -1
-    wsrewiring = 0.001
-    wxalpha = 1.0
-    mobilityratio = -1.0
+    dffilter = {
+        "nvertices" : [625],
+        "avgdegree" : [4],
+        "wxalpha" : [-1.0],
+    }
 
     expspath = pjoin(resdir[0], 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
@@ -203,9 +174,7 @@ def plot_recoveredrate_vs_beta(resdir, gamma, outdir):
     for col in df.columns:
         info('{}:{}'.format(col, np.unique(df[col])))
 
-    df = filter_exps_df(df, nagentspervertex=nagentspervertex, avgdegree=avgdegree,
-                   lathoroidal=lathoroidal, wsrewiring=wsrewiring, wxalpha=wxalpha,
-                   mobilityratio=mobilityratio, gamma=gamma)
+    df = filter_exps_df(df, dffilter)
 
     tops = np.unique(df.topologymodel)
     betas = np.unique(df.beta)
@@ -280,36 +249,35 @@ def plot_recoveredrate_vs_beta(resdir, gamma, outdir):
     fig.suptitle('Total infected ratio vs Contagion rate', size='xx-large')
     plt.savefig(pjoin(outdir, '{}.pdf'.format(gamma)))
 
-def plot_waxmans(resdir, outdir):
-    nagentspervertex = 1
-    avgdegree = 6
-    lathoroidal = -1
-    wsrewiring = 0.001
-    # wxalpha = 0.005
-    wxalpha = 0.0250
-    mobilityratio = -1.0
+##########################################################
+def plot_waxman_all(resdir, outdir):
+    dffilter = {
+        "nvertices" : [625],
+        "topologymodel" : ["wx"],
+        "avgdegree" : [4],
+        "gamma" :  [0.5],
+    }
 
     expspath = pjoin(resdir[0], 'exps.csv')
     df = pd.read_csv(expspath, index_col='expidx')
     df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
-    df = filter_exps_df(df, nagentspervertex=nagentspervertex, avgdegree=avgdegree,
-                   lathoroidal=lathoroidal, wsrewiring=wsrewiring, wxalpha=wxalpha,
-                   mobilityratio=mobilityratio, gamma=gamma)
+    df = filter_exps_df(df, dffilter)
 
     tops = np.unique(df.topologymodel)
     betas = np.unique(df.beta)
     stds = np.unique(df.gaussianstd)
 
-    fig, ax = plt.subplots(1, len(tops), figsize=(6*len(tops), 6))
+    alphas = np.unique(df.wxalpha)
+    fig, ax = plt.subplots(1, len(alphas), figsize=(6*len(alphas), 6))
 
-    for a, col in zip(ax, [str(t).upper() for t in tops]):
+    for a, col in zip(ax, [str(alpha).upper() for alpha in alphas]):
         a.set_title(col, size='x-large')
 
-    cols = ['topologymodel', 'beta', 'gaussianstd', 'recmean', 'recstd']
+    cols = ['wxalpha', 'beta', 'gaussianstd', 'recmean', 'recstd']
 
-    for j, top in enumerate(tops):
+    for j, alpha in enumerate(alphas):
         datadict = {k: [] for k in cols}
-        aux = df[df.topologymodel == top]
+        aux = df[df.wxalpha == alpha]
 
         valid = [] # filtering incomplete execution
 
@@ -334,7 +302,7 @@ def plot_waxmans(resdir, outdir):
                     recoveredratios.append(r)
 
                 #append row
-                datadict['topologymodel'].append(top)
+                datadict['wxalpha'].append(alpha)
                 datadict['beta'].append(b)
                 datadict['gaussianstd'].append(std_)
                 datadict['recmean'].append(np.mean(recoveredratios))
@@ -361,8 +329,53 @@ def plot_waxmans(resdir, outdir):
         ax[j].legend(title='Gaussian std')
         ax[j].set_xlim(left=0, right=1)
         ax[j].set_ylim(bottom=0, top=1)
+
+    plt.tight_layout()
     fig.suptitle('Total infected ratio vs Contagion rate', size='xx-large')
-    plt.savefig(pjoin(outdir, '{}.pdf'.format(gamma)))
+    plt.savefig(pjoin(outdir, '{}.pdf'.format('waxmans')))
+
+##########################################################
+def plot_ntransmissions_vs_gradient(resdir, expid, ax):
+    expdir = pjoin(resdir, expid)
+    gradpath = pjoin(expdir, 'attraction.csv')
+    ntransmpath = pjoin(expdir, 'ntransmpervertex.csv')
+    grads = pd.read_csv(gradpath).gradient
+    ntransm = pd.read_csv(ntransmpath).ntransmission
+    # print(ntransm, grads)
+    ax.scatter(grads, ntransm)
+
+##########################################################
+def plot_ntransmissions_vs_gradient_all(resdir, outdir):
+    dffilter = {
+        "topologymodel" : ["wx"],
+        "avgdegree" : [4],
+        "beta" :  [0.6],
+        "gamma" :  [0.5],
+        "gaussianstd" : [0.15],
+    }
+
+    expspath = pjoin(resdir[0], 'exps.csv')
+    df = pd.read_csv(expspath, index_col='expidx')
+    df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
+    df = filter_exps_df(df, dffilter)
+
+    alphas = sorted(np.unique(df.wxalpha))
+    seeds = sorted(np.unique(df.randomseed))
+    nalphas = len(alphas)
+    nseeds = len(seeds)
+    fig, ax = plt.subplots(nseeds, nalphas, squeeze=False, figsize=(6*nalphas, 6*nseeds))
+
+    for i, seed in enumerate(seeds):
+        for j, alpha in enumerate(alphas):
+            dffilter = {'randomseed': [i], 'wxalpha': [alpha]}
+            expid = filter_exps_df(df, dffilter).index.values[0]
+            plot_ntransmissions_vs_gradient(resdir[0], expid, ax[i, j])
+
+    fig.suptitle('Number of transmissions vs. Atraction on Waxman topologies\nROW: how far waxman is close to ER; COLUMNS: realizations', size=60)
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.savefig(pjoin(outdir, 'ntransmissions.png'))
+
+##########################################################
 def plot_attraction(attractionpath, outpath='/tmp/attraction.pdf'):
     """Plot map of attraction according to the @attractionpath csv file
 
@@ -397,8 +410,9 @@ def main():
     # plot_sir_all(args.resdir, outdir)
     # plot_measures_luc(args.resdir, outdir)
     # plot_pca(args.resdir, outdir)
-    plot_recoveredrate_vs_beta_gammas(args.resdir, outdir)
-    # plot_waxmans(args.resdir, outdir)
+    # plot_recoveredrate_vs_beta_all(args.resdir, outdir)
+    # plot_waxman_all(args.resdir, outdir)
+    plot_ntransmissions_vs_gradient_all(args.resdir, outdir)
     # plot_attraction('/tmp/del/aw0otrky/attraction.csv')
 
 if __name__ == "__main__":
