@@ -557,12 +557,19 @@ def run_experiment(cfg):
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
 
     ntransmpervertex = np.zeros(nvertices, dtype=int)
-    ncontacts_susc = np.zeros(nvertices * (nvertices - 1) // 2, dtype=np.uint8)
 
     particles = distribute_agents(nvertices, nagents, expidx)
     nparticlesstds = np.zeros((MAXITERS,), dtype=float)
 
     g = initialize_gradients(g, coords, ngaussians, gaussianstd, expidx)
+
+    if savencontacts:
+        ncontacts_inf = np.zeros((nvertices, 2), dtype=np.uint8)
+        gradthresh = multivariate_normal(3*gaussianstd,
+                                 np.array([0, 0]), np.eye(2)*gaussianstd)
+        attr_vinds = np.where(g.vs['gradient'] >= gradthresh)[0]
+        nonattr_vinds = np.where(g.vs['gradient'] < gradthresh)[0]
+
     export_map(coords, g.vs['gradient'], mappath, expidx)
 
     if plotrate > 0:
@@ -578,9 +585,9 @@ def run_experiment(cfg):
         lastepoch = ep
 
         if savencontacts:
-            susceptibleids = np.where(status == SUSCEPTIBLE)[0]
-            ncontacts_susc = update_contacts_list(susceptibleids, ncontacts_susc,
-                                                  nvertices)
+            ncontacts_inf = update_contacts_list(ncontacts_inf, attr_vinds,
+                                                 nonattr_vinds,
+                                                 status, particles, nvertices)
         if plotrate > 0 and ep % plotrate == 0:
             plot_epoch_graphs(ep-1, g, coords, visual, status, nvertices, particles,
                               nagents, statuscountpervertex[:, 0],
@@ -622,7 +629,7 @@ def run_experiment(cfg):
     if savencontacts:
         import h5py
         hf = h5py.File(ncontactspath, 'w')
-        hf.create_dataset('default', data=ncontacts_susc, compression="gzip")
+        hf.create_dataset('default', data=ncontacts_inf, compression="gzip")
         hf.close()
 
     export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
@@ -667,11 +674,13 @@ def initialize_gradients_peak(g):
     return g
 
 ##########################################################
-def multivariate_normal(x, d, mean, cov):
-    """pdf of the multivariate normal when the covariance matrix is positive definite.
+def multivariate_normal(x, mean, cov):
+    """P.d.f. of the multivariate normal when the covariance matrix is positive definite.
     Source: wikipedia"""
-    return (1. / (np.sqrt((2 * np.pi)**d * np.linalg.det(cov))) *
-            np.exp(-(np.linalg.solve(cov, x - mean).T.dot(x - mean)) / 2))
+    ndims = len(mean)
+    B = x - mean
+    return (1. / (np.sqrt((2 * np.pi)**ndims * np.linalg.det(cov))) *
+            np.exp(-0.5*(np.linalg.solve(cov, B).T.dot(B))))
 
 ##########################################################
 def gaussian(xx, mu, sig):
@@ -723,7 +732,7 @@ k
     """
 
     for i, v in enumerate(g.vs):
-        g.vs[i]['gradient'] = multivariate_normal(coords[i, :], 2, mu, cov)
+        g.vs[i]['gradient'] = multivariate_normal(coords[i, :], mu, cov)
 
     return g
 
@@ -1015,6 +1024,8 @@ def main():
     for p in params:
         p['savencontacts'] = args.ncontacts
 
+    # print(params)
+    # input()
     if args.shuffle: np.random.shuffle(params)
 
     if cfg.nprocs[0] == 1:

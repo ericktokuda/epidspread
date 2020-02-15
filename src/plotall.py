@@ -22,6 +22,7 @@ import plotly.graph_objects as go
 from ipywidgets import widgets
 import plotly.express as px
 import subprocess
+import h5py
 
 ##########################################################
 def read_niterations(outdir):
@@ -376,6 +377,62 @@ def plot_ntransmissions_vs_gradient_all(resdir, outdir):
     plt.savefig(pjoin(outdir, 'ntransmissions.png'))
 
 ##########################################################
+# def plot_ntransmissions_vs_wxalpha(resdir, expid, ax):
+    # expdir = pjoin(resdir, expid)
+    # gradpath = pjoin(expdir, 'attraction.csv')
+    # ntransmpath = pjoin(expdir, 'ntransmpervertex.csv')
+    # grads = pd.read_csv(gradpath).gradient
+    # ntransm = pd.read_csv(ntransmpath).ntransmission
+    # # print(ntransm, grads)
+    # ax.scatter(grads, ntransm)
+
+##########################################################
+def plot_ncontacts_vs_wxalpha(resdir, outdir):
+    dffilter = {
+        "topologymodel" : ["wx"],
+        "avgdegree" : [4],
+        "beta" :  [0.4],
+        "gamma" :  [0.25],
+        "gaussianstd" : [0.2],
+        "randomseed" : [0],
+    }
+
+    expspath = pjoin(resdir[0], 'exps.csv')
+    df = pd.read_csv(expspath, index_col='expidx')
+    df = df.sort_values(['topologymodel', 'beta', 'gamma', 'gaussianstd', 'avgdegree'])
+    df = filter_exps_df(df, dffilter)
+
+    alphas = sorted(np.unique(df.wxalpha))
+    seeds = sorted(np.unique(df.randomseed))
+    nalphas = len(alphas)
+    nseeds = len(seeds)
+    fig, ax = plt.subplots(1, nalphas, squeeze=False, figsize=(6*nalphas, 6*1))
+
+    avgcontacts = { str(k): [] for k in alphas}
+    for j, alpha in enumerate(sorted(alphas)):
+        dffilter = {'wxalpha': [alpha]}
+        expid = filter_exps_df(df, dffilter).index.values[0]
+        expdir = pjoin(resdir[0], expid)
+        ncontactspath = pjoin(expdir, 'ncontacts.h5')
+        fh5 = h5py.File(ncontactspath, 'r')
+        ncontacts = np.array(fh5['default'])
+        bins = range(10)
+        ax[0, j].hist(ncontacts[:, 0], bins=bins, alpha=0.7)
+        ax[0, j].hist(ncontacts[:, 1], bins=bins, alpha=0.7)
+        ax[0, j].set_ylim(0, 625)
+
+        ax[0, j].set_xlabel('Waxman parameter')
+        ax[0, j].set_ylabel('Count S-I')
+
+        plt.text(0.5, 0.9, 'Waxman {}'.\
+         format(alpha),
+         ha='center', va='center',
+         fontsize=20, transform = ax[0, j].transAxes)
+
+            
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.savefig(pjoin(outdir, 'ncontacts.pdf'))
+##########################################################
 def plot_attraction(attractionpath, outpath='/tmp/attraction.pdf'):
     """Plot map of attraction according to the @attractionpath csv file
 
@@ -412,7 +469,8 @@ def main():
     # plot_pca(args.resdir, outdir)
     # plot_recoveredrate_vs_beta_all(args.resdir, outdir)
     # plot_waxman_all(args.resdir, outdir)
-    plot_ntransmissions_vs_gradient_all(args.resdir, outdir)
+    # plot_ntransmissions_vs_gradient_all(args.resdir, outdir)
+    plot_ncontacts_vs_wxalpha(args.resdir, outdir)
     # plot_attraction('/tmp/del/aw0otrky/attraction.csv')
 
 if __name__ == "__main__":

@@ -185,10 +185,7 @@ cpdef generate_waxman_adj(long n, long avgdegree, float alpha, float beta,
                 adj[i, 0] = u
                 adj[i, 1] = v
                 i += 1
-        # if u % 10 == 0:
-            # print(u)
     adj = adj[:i]
-    # print(adj.tolist())
     return np.asarray(adj), np.asarray(x), np.asarray(y)
 
 ##########################################################
@@ -202,14 +199,33 @@ cpdef get_linear_index_from_triu(int i, int j, int n):
     return int((n*(n-1)/2) - (n-i)*((n-i)-1)/2 + j - i - 1)
 
 ##########################################################
-cpdef update_contacts_list(long[:] sortedids, np.uint8_t[:] contactssum, long n):
-    cdef Py_ssize_t nsusc = len(sortedids)
-    cdef Py_ssize_t i, j, first, second
-    cdef int k
+cpdef update_contacts_list(np.uint8_t[:, :] contactssum,
+                           long[:] attr_vids,
+                           long[:] nonattr_vids,
+                           long[:] status,
+                           particles,
+                           long n):
+    # cdef Py_ssize_t nsusc = len(sortedids)
+    # cdef Py_ssize_t i, j, first, second
+    # cdef int k
+    cdef Py_ssize_t i
+    cdef int v
 
-    for i, first in enumerate(sortedids[:nsusc-1]):
-        for j, second in enumerate(sortedids):
-            k = get_linear_index_from_triu(i, j, n)
-            contactssum[k] += 1
+    for i, vids in enumerate([attr_vids, nonattr_vids]):
+        for v in vids:
+            agents = particles[v]
+            vaffected = False
+
+            for a in agents: # Check if vertex is affected
+                if status[a] == INFECTED:
+                    vaffected = True
+                    break
+
+            if not vaffected: continue
+
+            for a in agents:
+                if status[a] == SUSCEPTIBLE:
+                    contactssum[a][i] += 1
+
     return contactssum
     # return np.asarray(contactssum)
