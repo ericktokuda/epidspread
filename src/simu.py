@@ -355,8 +355,7 @@ def plot_gradients(g, coords, gradiestsrasterpath, visualorig, plotalpha):
     gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
     visual['edge_width'] = 0
 
-    # try:
-    if True:
+    if False:
         from mpl_toolkits.mplot3d import Axes3D
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
@@ -366,7 +365,6 @@ def plot_gradients(g, coords, gradiestsrasterpath, visualorig, plotalpha):
         ax.set_xticks([])
         ax.set_yticks([])
         plt.savefig(gradiestsrasterpath)
-    # except:
     else:
         igraph.plot(g, target=gradiestsrasterpath, layout=coords.tolist(),
                     vertex_color=gradientscolors, **visual)
@@ -565,7 +563,7 @@ def run_experiment(cfg):
 
     if savencontacts:
         ncontacts_inf = np.zeros((nvertices, 2), dtype=np.uint8)
-        gradthresh = multivariate_normal(3*gaussianstd,
+        gradthresh = multivariate_normal(1*gaussianstd,
                                  np.array([0, 0]), np.eye(2)*gaussianstd)
         attr_vinds = np.where(g.vs['gradient'] >= gradthresh)[0]
         nonattr_vinds = np.where(g.vs['gradient'] < gradthresh)[0]
@@ -629,7 +627,9 @@ def run_experiment(cfg):
     if savencontacts:
         import h5py
         hf = h5py.File(ncontactspath, 'w')
-        hf.create_dataset('default', data=ncontacts_inf, compression="gzip")
+        denom = np.array([len(attr_vinds), len(nonattr_vinds)])
+        aux = np.array(ncontacts_inf).astype(float) / denom
+        hf.create_dataset('default', data=aux, compression="gzip")
         hf.close()
 
     export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
