@@ -1,5 +1,6 @@
 {
         "outdir" : ["/tmp/toy04/"],
+        "wxparamspath" : ["config/waxman_params.csv"],
         "nvertices" : [121],
         "nagentspervertex" : [1],
         "topologymodel" : ["er"],
@@ -7,6 +8,7 @@
         "lathoroidal" : [-1],
         "baoutpref" : [-1],
         "wsrewiring" : [-1],
+        "wxalpha" : [-1],
         "nepochs" : [-1],
         "mobilityratio" : [-1],
         "s0" : [0.98],

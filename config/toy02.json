@@ -1,5 +1,6 @@
 {
         "outdir" : ["/tmp/toy02/"],
+        "wxparamspath" : ["config/waxman_params.csv"],
         "nvertices" : [16],
         "nagentspervertex" : [1],
         "topologymodel" : ["lattice"],
@@ -7,6 +8,7 @@
         "lathoroidal" : [true],
         "baoutpref" : [-1],
         "wsrewiring" : [-1],
+        "wxalpha" : [-1],
         "nepochs" : [-1],
         "mobilityratio" : [0.3],
         "s0" : [0.8],
