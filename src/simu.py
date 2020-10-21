@@ -255,8 +255,7 @@ def generate_distribution_of_status(N, s0, i0, expidx):
     info('exp:{} Generating random distribution of S, I, R ...'.format(expidx))
     status = np.ndarray(N, dtype=int)
     status[0: s0] = SUSCEPTIBLE
-    status[s0:s0+i0] = INFECTED
-    status[s0+i0:] = RECOVERED
+    status[s0:] = INFECTED
     np.random.shuffle(status)
     return status
 
@@ -387,20 +386,6 @@ def plot_topology(g, coords, toprasterpath, visualorig, plotalpha):
     igraph.plot(g, target=toprasterpath, layout=coords.tolist(),
                 vertex_color=gradientscolors, **visual)
 ##########################################################
-def generate_plots_animation(outdir, animationpath):
-    """Fork a process to generate a mosaic of the plots.
-    Requires ffmpeg to work 
-
-    Args:
-    animationpath(str): output path
-    """
-    # cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
-    cmd = "nohup /usr/bin/ffmpeg -framerate 1 -pattern_type glob -i '{}/concat*.png'   -c:v libx264 -r 30 -pix_fmt yuv420p {} 2>&1 >/dev/null".format(outdir, animationpath)
-    print(cmd)
-    proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
-    stdout, stderr = proc.communicate()
-    print(stderr)
-
 def delete_individual_frames(outdir):
     """Delete individual frames
 
@@ -425,7 +410,6 @@ def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransm
         'transmstep': transmstep.astype(int),
         'S': statuscountsum[:, 0],
         'I': statuscountsum[:, 1],
-        'R': statuscountsum[:, 2],
         'nparticlesstd': nparticlesstds
     })
     outdf.to_csv(ntransmpath, index=True, index_label='t')
@@ -433,8 +417,7 @@ def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransm
     ########################################################## Plot SIR over time
     info('exp:{} Generating plots for counts of S, I, R'.format(expidx))
     fig, ax = plt.subplots(1, 1)
-    plot_sir(statuscountsum[:, 0], statuscountsum[:, 1], statuscountsum[:, 2],
-             fig, ax, sirplotpath)
+    plot_sir(statuscountsum[:, 0], statuscountsum[:, 1], fig, ax, sirplotpath)
 
     info('exp:{} Elapsed time: {:.2f}min'.format(expidx, elapsed/60))
     summary = dict(
@@ -479,9 +462,6 @@ def run_experiment(cfg):
     wxalpha = cfg['wxalpha']
     mobilityratio   = cfg['mobilityratio']
     nepochs   = cfg['nepochs']
-    # s0        = int(nagents*cfg['s0'])
-    # r0        = int(nagents*cfg['r0'])
-    # i0        = nagents - s0 - r0 # To sum up nagents
     beta      = cfg['beta']
     gamma     = cfg['gamma']
     ngaussians = cfg['ngaussians']
@@ -491,7 +471,6 @@ def run_experiment(cfg):
     nprocs    = cfg['nprocs']
     randomseed= cfg['randomseed']
     expidx= cfg['expidx']
-    savencontacts= cfg['savencontacts']
 
     ########################################################## 
     outdir = pjoin(outdir, expidx)
@@ -505,7 +484,6 @@ def run_experiment(cfg):
     gradsrasterpath = pjoin(outdir, 'gradients.png')
     toporasterpath = pjoin(outdir, 'topology.png')
     sirplotpath = pjoin(outdir, 'sir.png')
-    ncontactspath = pjoin(outdir, 'ncontacts.h5')
 
     if os.path.exists(summarypath):
         return
@@ -545,12 +523,12 @@ def run_experiment(cfg):
 
     nagents   = cfg['nagentspervertex'] * nvertices
     s0        = int(nagents*cfg['s0'])
-    r0        = int(nagents*cfg['r0'])
-    i0        = nagents - s0 - r0 # To sum up nagents
+    i0        = int(nagents*cfg['i0'])
 
     status = generate_distribution_of_status(nagents, s0, i0, expidx)
-    statuscountperepoch = np.zeros((MAXITERS, 3), dtype=int)
-    statuscountperepoch[0, :] = np.array([s0, i0, r0])
+    
+    statuscountperepoch = np.zeros((MAXITERS, 2), dtype=int)
+    statuscountperepoch[0, :] = np.array([s0, i0])
 
     # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
 
@@ -560,13 +538,6 @@ def run_experiment(cfg):
     nparticlesstds = np.zeros((MAXITERS,), dtype=float)
 
     g = initialize_gradients(g, coords, ngaussians, gaussianstd, expidx)
-
-    if savencontacts:
-        ncontacts_inf = np.zeros((nvertices, 2), dtype=np.uint8)
-        gradthresh = multivariate_normal(1*gaussianstd,
-                                 np.array([0, 0]), np.eye(2)*gaussianstd)
-        attr_vinds = np.where(g.vs['gradient'] >= gradthresh)[0]
-        nonattr_vinds = np.where(g.vs['gradient'] < gradthresh)[0]
 
     export_map(coords, g.vs['gradient'], mappath, expidx)
 
@@ -582,14 +553,10 @@ def run_experiment(cfg):
     for ep in range(1, maxepoch):
         lastepoch = ep
 
-        if savencontacts:
-            ncontacts_inf = update_contacts_list(ncontacts_inf, attr_vinds,
-                                                 nonattr_vinds,
-                                                 status, particles, nvertices)
         if plotrate > 0 and ep % plotrate == 0:
             plot_epoch_graphs(ep-1, g, coords, visual, status, nvertices, particles,
                               nagents, statuscountpervertex[:, 0],
-                              statuscountpervertex[:, 1], statuscountpervertex[:, 2],
+                              statuscountpervertex[:, 1],
                               outdir, expidx)
 
         if ep % 10 == 0: info('exp:{}, t:{}'.format(expidx, ep))
@@ -613,9 +580,9 @@ def run_experiment(cfg):
 
         if nepochs == -1 and np.sum(status==INFECTED) == 0: break
 
-    if plotrate > 0 and os.path.exists('/usr/bin/ffmpeg'):
-            generate_plots_animation(outdir, animationpath)
-            delete_individual_frames(outdir)
+    # if plotrate > 0 and os.path.exists('/usr/bin/ffmpeg'):
+            # generate_plots_animation(outdir, animationpath)
+            # delete_individual_frames(outdir)
 
     statuscountperepoch = statuscountperepoch[:lastepoch+1, :]
     transmstep = transmstep[:lastepoch+1]
@@ -623,14 +590,6 @@ def run_experiment(cfg):
     nparticlesstds = nparticlesstds[:lastepoch+1]
 
     elapsed = time.time() - t0
-
-    if savencontacts:
-        import h5py
-        hf = h5py.File(ncontactspath, 'w')
-        denom = np.array([len(attr_vinds), len(nonattr_vinds)])
-        aux = np.array(ncontacts_inf).astype(float) / denom
-        hf.create_dataset('default', data=aux, compression="gzip")
-        hf.close()
 
     export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountperepoch, nparticlesstds, lastepoch, mobstep,
@@ -760,7 +719,7 @@ def initialize_gradients(g, coords, ngaussians, sigma, expidx):
     return initialize_gradients_gaussian(g, coords, mu, cov)
 
 ##########################################################
-def sum_status_per_vertex(status, particles, nvertices, nclasses=3):
+def sum_status_per_vertex(status, particles, nvertices, nclasses=2):
     """Compute the sum of each status
 
     Args:
@@ -774,19 +733,18 @@ def sum_status_per_vertex(status, particles, nvertices, nclasses=3):
     nrecovered(list of int): number of recovered per vertex
     """
 
-    dist = np.zeros((nvertices, 3))
+    dist = np.zeros((nvertices, nclasses))
     for i in range(nvertices):
         dist[i, :] = np.bincount(status[particles[i]], minlength=nclasses)
 
     return dist
 ##########################################################
 def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
-                      N, nsusceptibles, ninfected, nrecovered,
+                      N, nsusceptibles, ninfected,
                       outdir, expidx, plotalpha=.9):
     info('exp:{} Generating plots'.format(expidx))
     susceptiblecolor = []
     infectedcolor = []
-    recoveredcolor = []
 
     for z in nsusceptibles:
         zz = [0, 1, 0, math.log(z, N) + 0.2] if z*N > 1 else [0, 0, 0, 0] # Bug on log(1,1)
@@ -794,42 +752,31 @@ def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
     for z in ninfected:
         zz = [1, 0, 0, math.log(z, N) + 0.2] if z*N > 1 else [0, 0, 0, 0] # Bug on log(1,1)
         infectedcolor.append(zz)
-    for z in nrecovered:
-        zz = [0, 0, 1,  math.log(z, N) + 0.2] if z*N > 1 else [0, 0, 0, 0] # Bug on log(1,1)
-        recoveredcolor.append(zz)  
         
     outsusceptiblepath = pjoin(outdir, 'susceptible{:02d}.png'.format(ep))
     outinfectedpath = pjoin(outdir, 'infected{:02d}.png'.format(ep))
-    outrecoveredpath = pjoin(outdir, 'recovered{:02d}.png'.format(ep))
 
     igraph.plot(g, target=outsusceptiblepath, layout=coords.tolist(),
                 vertex_color=susceptiblecolor, **visual)
     igraph.plot(g, target=outinfectedpath, layout=coords.tolist(),
                 vertex_color=infectedcolor, **visual)
-    igraph.plot(g, target=outrecoveredpath, layout=coords.tolist(),
-                vertex_color=recoveredcolor, **visual)
 
     outconcatpath = pjoin(outdir, 'concat{:02d}.png'.format(ep))
-    proc = Popen('convert {} {} {} +append {}'.format(outsusceptiblepath,
-                                                         outinfectedpath,
-                                                         outrecoveredpath,
-                                                         outconcatpath),
-                 shell=True, stdout=PIPE, stderr=PIPE)
+    proc = Popen('convert {} {} +append {}'.format(outsusceptiblepath,
+        outinfectedpath, outconcatpath),
+        shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
 
     # Delete individual files
-    proc = Popen('rm {} {} {} '.format(outsusceptiblepath,
-                                         outinfectedpath,
-                                         outrecoveredpath
+    proc = Popen('rm {} {}'.format(outsusceptiblepath, outinfectedpath,
                                          ),
                  shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
 
 ##########################################################
-def plot_sir(s, i, r, fig, ax, sirpath):
+def plot_sir(s, i, fig, ax, sirpath):
     ax.plot(s, 'g', label='Susceptibles')
     ax.plot(i, 'r', label='Infected')
-    ax.plot(r, 'b', label='Recovered')
     ax.legend()
     fig.savefig(sirpath)
 
@@ -991,7 +938,6 @@ def main():
     parser.add_argument('--continue_', action='store_true', help='Continue execution')
     parser.add_argument('--shuffle', action='store_true',
                         help='Shuffled traversing of config parameters')
-    parser.add_argument('--ncontacts', action='store_true', help='save number of contacts')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s] %(message)s',
@@ -1021,11 +967,6 @@ def main():
         expsdf.drop(columns=['outdir', 'nprocs']).to_csv(expspath, index=False)
 
     params = expsdf.to_dict(orient='records')
-    for p in params:
-        p['savencontacts'] = args.ncontacts
-
-    # print(params)
-    # input()
     if args.shuffle: np.random.shuffle(params)
 
     if cfg.nprocs[0] == 1:

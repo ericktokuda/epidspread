@@ -115,14 +115,11 @@ cpdef step_transmission(long nvertices, long[:] status, double beta, double gamm
 
         nsusceptible = 0
         ninfected =  0
-        nrecovered =  0
         for j in range(nlocalparticles):
             if status[localparticles[j]] == 0: # status of particle j in vertex i
                 nsusceptible += 1
             elif status[localparticles[j]] == 1:
                 ninfected += 1
-            elif status[localparticles[j]] == 2:
-                nrecovered += 1
 
         x  = np.random.rand(nsusceptible)
         y  = np.random.rand(ninfected)
@@ -146,7 +143,7 @@ cpdef step_transmission(long nvertices, long[:] status, double beta, double gamm
             acc = 0
             for j in range(nlocalparticles):
                 if status_fixed[localparticles[j]] == INFECTED:
-                    status[localparticles[j]] = RECOVERED
+                    status[localparticles[j]] = SUSCEPTIBLE
                     acc += 1
                     if acc == numnewrecovered: break
 
