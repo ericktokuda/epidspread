@@ -124,14 +124,11 @@ cpdef step_transmission(long nvertices, long[:] status, double beta, double gamm
             elif status[localparticles[j]] == 2:
                 nrecovered += 1
 
-        x  = np.random.rand(nsusceptible*ninfected)
+        x  = np.random.rand(nsusceptible)
         y  = np.random.rand(ninfected)
 
-        numnewinfected = np.sum(x <= beta)
+        numnewinfected = np.sum(x <= (1 - (1 - beta)**ninfected))
         numnewrecovered = np.sum(y <= gamma)
-
-        if numnewinfected > nsusceptible: numnewinfected = nsusceptible
-        if numnewrecovered > ninfected: numnewrecovered = ninfected
 
         ntransmissions[i] = numnewinfected
 
