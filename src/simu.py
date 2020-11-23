@@ -42,16 +42,7 @@ MAXITERS = 100000
 
 #############################################################
 def get_4connected_neighbours_2d(i, j, n, thoroidal=False):
-    """Get 4-connected neighbours. It does not check if there are repeated entries (2x2 or 1x1)
-
-    Args:
-    i(int): row of the matrix
-    j(int): column of the matrix
-    n(int): side of the square matrix
-
-    Returns:
-    ndarray 4x2: 4 neighbours indices
-    """
+    """Get the indices of the 4-connected neighbours of element (i, j). It does not check if there are repeated entries (2x2 or 1x1)"""
     inds = []
     if j > 0: # left
         inds.append([i, j-1])
@@ -75,25 +66,18 @@ def get_4connected_neighbours_2d(i, j, n, thoroidal=False):
 
     return np.array(inds)
 
+#############################################################
 def fast_random_choice(lst, probs, randnum):
     return lst[np.searchsorted(probs.cumsum(), randnum)]
 
+#############################################################
 def random_choice_prob_index(a, axis=1):
     r = np.expand_dims(np.random.rand(a.shape[1-axis]), axis=axis)
     return (a.cumsum(axis=axis) > r).argmax(axis=axis)
 
 #############################################################
 def generate_lattice(n, thoroidal=False, s=10):
-    """Generate 2d lattice of side n
-
-    Args:
-    n(int): side of the lattice
-    thoroidal(bool): thoroidal lattice
-    s(float): edge size
-
-    Returns:
-    ndarray nx2, ndarray nxn: positions and adjacency matrix (triangular)
-    """
+    """Generate 2d lattice of side @n. Returns a tuple containing the positions and the adjacency matrix """
     n2 = n*n
     pos = np.ndarray((n2, 2), dtype=float)
     adj = np.zeros((n2, n2), dtype=int)
@@ -113,10 +97,12 @@ def generate_lattice(n, thoroidal=False, s=10):
             for neigh in neighids:
                 adj[curidx, neigh] = 1
     return pos, adj
+
 #############################################################
 def run_one_experiment_given_list(l):
     run_experiment(l)
 
+#############################################################
 def get_rgg_params(nvertices, avgdegree):
     rggcatalog = {
         '625,6': 0.056865545,
@@ -133,6 +119,7 @@ def get_rgg_params(nvertices, avgdegree):
 
     return scipy.optimize.brentq(f, 0.0001, 10000)
 
+#############################################################
 def generate_waxman(n, maxnedges, alpha, beta, domain=(0, 0, 1, 1)):
     adjlist, x, y = generate_waxman_adj(n, maxnedges, alpha, beta,
                                         domain[0], domain[1], domain[2], domain[3])
@@ -143,6 +130,7 @@ def generate_waxman(n, maxnedges, alpha, beta, domain=(0, 0, 1, 1)):
     g.vs['y'] = y
     return g
 
+#############################################################
 def get_waxman_params(nvertices, avgdegree, alpha, wxparamspath):
     maxnedges = nvertices * nvertices // 2
     if os.path.exists(wxparamspath):
@@ -161,9 +149,9 @@ def get_waxman_params(nvertices, avgdegree, alpha, wxparamspath):
     return beta, alpha
 
 #############################################################
-def generate_graph(topologymodel, nvertices, avgdegree,
-                   latticethoroidal, baoutpref, wsrewiring, wxalpha, expidx,
-                   randomseed, wxparamspath, tmpdir):
+def generate_graph(topologymodel, nvertices, avgdegree, latticethoroidal,
+                   baoutpref, wsrewiring, wxalpha, expidx, randomseed,
+                   wxparamspath, tmpdir):
     """Generate graph with given topology
 
     Args:
@@ -226,7 +214,7 @@ def generate_graph(topologymodel, nvertices, avgdegree,
 
 ##########################################################
 def copy_experiment_config(cfgdf, outjsonpath, expidx):
-    """Copy @configs 
+    """Copy @configs
 
     Args:
     cfgdf(pd.DataFrame): dataframe with the index column as field name and the
@@ -259,18 +247,9 @@ def generate_distribution_of_status(N, s0, i0, expidx):
     np.random.shuffle(status)
     return status
 
+##########################################################
 def define_plot_layout(mapside, plotzoom, expidx):
-    """Establish the visual of the igraph plot
-
-    Args:
-    mapside(int): side size of the map
-    plotzoom(int): zoom of the map
-    expidx(int): experiment index
-
-    Returns:
-    dict: to be used by igraph.plot
-    """
-
+    """Create a dict containing the layout settings"""
     # Square of the center surrounded by radius 3
     #  (equiv to 99.7% of the points of a gaussian)
     visual = dict(
@@ -295,7 +274,7 @@ def distribute_agents(nvertices, nagents, expidx):
     expidx(int): experiment index
 
     Returns:
-    list of list: each element corresponds to a vertex and contains the indices of the 
+    list of list: each element corresponds to a vertex and contains the indices of the
     vertices
     """
 
@@ -346,7 +325,6 @@ def plot_gradients(g, coords, gradiestsrasterpath, visualorig, plotalpha):
     outgradientspath(str): output path
     visual(dict): parameters of the layout of the igraph plot
     """
-
     visual = visualorig.copy()
     aux = np.sum(g.vs['gradient'])
     gradientscolors = [ [c, c, c, plotalpha] for c in g.vs['gradient']]
@@ -385,24 +363,21 @@ def plot_topology(g, coords, toprasterpath, visualorig, plotalpha):
     gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
     igraph.plot(g, target=toprasterpath, layout=coords.tolist(),
                 vertex_color=gradientscolors, **visual)
+
 ##########################################################
 def delete_individual_frames(outdir):
-    """Delete individual frames
-
-    Args:
-    outdir(str): output path
-    """
-    # cmd = 'convert -delay 120 -loop 0  {}/concat*.png "{}"'.format(outdir, animationpath)
+    """Delete individual frames in @outdir"""
     cmd = "rm {}/concat*.png".format(outdir)
     print(cmd)
     proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
     print(stderr)
+
 ##########################################################
-def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
-                     elapsed, statuscountsum, nparticlesstds, lastepoch, mobstep,
-                     ncomponents, nvertices, nedges, coordsrms, avgpathlen, sirplotpath,
-                     summarypath, expidx):
+def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep,
+                     ntransmpath, elapsed, statuscountsum, nparticlesstds,
+                     lastepoch, mobstep, ncomponents, nvertices, nedges,
+                     coordsrms, avgpathlen, sirplotpath, summarypath, expidx):
     aux = pd.DataFrame(ntransmpervertex)
     aux.to_csv(ntransmpervertexpath, index=False, header=['ntransmission'])
 
@@ -414,7 +389,7 @@ def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransm
     })
     outdf.to_csv(ntransmpath, index=True, index_label='t')
 
-    ########################################################## Plot SIR over time
+    # Plot SIR over time
     info('exp:{} Generating plots for counts of S, I, R'.format(expidx))
     fig, ax = plt.subplots(1, 1)
     plot_sir(statuscountsum[:, 0], statuscountsum[:, 1], fig, ax, sirplotpath)
@@ -437,19 +412,15 @@ def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransm
 
 ##########################################################
 def run_experiment(cfg):
-    """Execute an experiment given the parameters defined in @cfg
-
-    Args:
-    cfg(dict): dict of parameters
-    """
+    """Execute an experiment given the parameters defined in the @cfg dict."""
 
     plotalpha = .9
     DELAYTIME = 3600
 
     t0 = time.time()
     cfgdf = pd.DataFrame.from_dict(cfg, 'index', columns=['data'])
-    
-    ##########################################################  Local vars
+
+    # Local vars
     outdir = cfg['outdir']
     wxparamspath= cfg['wxparamspath']
     nvertices = cfg['nvertices']
@@ -472,7 +443,6 @@ def run_experiment(cfg):
     randomseed= cfg['randomseed']
     expidx= cfg['expidx']
 
-    ########################################################## 
     outdir = pjoin(outdir, expidx)
     ntransmpath = pjoin(outdir, 'ntransmperepoch.csv') # Stats per epoch
     summarypath = pjoin(outdir, 'summary.csv') # General info from the run
@@ -504,14 +474,13 @@ def run_experiment(cfg):
 
 
     visual = define_plot_layout(mapside, plotzoom, expidx)
-    
+
     if mobilityratio == -1: # Steps occur in parallel
         transmstep = np.ones(MAXITERS, dtype=bool)
         mobstep = np.ones(MAXITERS, dtype=bool)
     else: # They occur in an interleaved way
         transmstep = np.zeros(MAXITERS, dtype=bool)
         mobstep = np.zeros(MAXITERS, dtype=bool)
-
 
     g, coords = generate_graph(topologymodel, nvertices, avgdegree,
                                latticethoroidal, baoutpref, wsrewiring, wxalpha,
@@ -526,7 +495,7 @@ def run_experiment(cfg):
     i0        = int(nagents*cfg['i0'])
 
     status = generate_distribution_of_status(nagents, s0, i0, expidx)
-    
+
     statuscountperepoch = np.zeros((MAXITERS, 2), dtype=int)
     statuscountperepoch[0, :] = np.array([s0, i0])
 
@@ -574,7 +543,7 @@ def run_experiment(cfg):
         status, newtransm = step_transmission(nvertices, status, beta, gamma, particles)
         status = np.asarray(status)
         ntransmpervertex += newtransm
-      
+
         statuscountpervertex = sum_status_per_vertex(status, particles, nvertices)
         statuscountperepoch[ep, :] = np.sum(statuscountpervertex, 0)
 
@@ -620,22 +589,14 @@ def visualize_static_graph_layouts(g, layoutspath, outdir, plotalpha=.9):
 
 ########################################################## Distrib. of gradients
 def initialize_gradients_peak(g):
-    """Initizalition of gradients with a peak at 0
-
-    Args:
-    g(igraph.Graph): graph instance
-
-    Returns:
-    igraph.Graph: graph instance with attribute 'gradient' updated
-    """
+    """Initizalition of gradients with a peak in the 0-th vertex. Returns the graph with updated gradients"""
     g.vs['gradient'] = 0.1
     g.vs[0]['gradient'] = 1
     return g
 
 ##########################################################
 def multivariate_normal(x, mean, cov):
-    """P.d.f. of the multivariate normal when the covariance matrix is positive definite.
-    Source: wikipedia"""
+    """P.d.f. of the multivariate normal when the covariance matrix is positive definite.  Source: wikipedia"""
     ndims = len(mean)
     B = x - mean
     return (1. / (np.sqrt((2 * np.pi)**ndims * np.linalg.det(cov))) *
@@ -652,24 +613,17 @@ def set_gaussian_weights_recursive(g, curid, nextvs, dist, mu, sigma):
     supernewgrad = gaussian(dist+1, mu, sigma)
     visitted.add(curid)
     for v in g.neighbors(curid):
-        g.vs[v]['gradient'] = supernewgrad 
+        g.vs[v]['gradient'] = supernewgrad
 
     visitted.remove(curid)
 
 ##########################################################
 def initialize_gradients_gaussian_on_graph(g, mu=0, sigma=1):
-    """Initizalition of gradients with a single gaussian
-
-    Args:
-    g(igraph.Graph): graph instance
-k
-    Returns:
-    igraph.Graph: graph instance with attribute 'gradient' updated
-    """
+    """Initizalition of gradients with a gaussian *not* considering the location. Returns the an igraph instance with updated gradients """
 
     # centeridx = int((g.vcount())/2)
     if g.vcount() % 2 == 0:
-        centeridx = int((g.vcount())/2 - np.sqrt(g.vcount())/2) 
+        centeridx = int((g.vcount())/2 - np.sqrt(g.vcount())/2)
     else:
         centeridx = int((g.vcount())/2)
     dists = g.shortest_paths(centeridx)
@@ -681,14 +635,7 @@ k
 
 ##########################################################
 def initialize_gradients_gaussian(g, coords, mu, cov):
-    """Initizalition of gradients with a single gaussian
-
-    Args:
-    g(igraph.Graph): graph instance
-k
-    Returns:
-    igraph.Graph: graph instance with attribute 'gradient' updated
-    """
+    """Initizalition of gradients with a gaussian considering the location. Returns the an igraph instance with updated gradients """
 
     for i, v in enumerate(g.vs):
         g.vs[i]['gradient'] = multivariate_normal(coords[i, :], mu, cov)
@@ -738,6 +685,7 @@ def sum_status_per_vertex(status, particles, nvertices, nclasses=2):
         dist[i, :] = np.bincount(status[particles[i]], minlength=nclasses)
 
     return dist
+
 ##########################################################
 def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
                       N, nsusceptibles, ninfected,
@@ -752,7 +700,7 @@ def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
     for z in ninfected:
         zz = [1, 0, 0, math.log(z, N) + 0.2] if z*N > 1 else [0, 0, 0, 0] # Bug on log(1,1)
         infectedcolor.append(zz)
-        
+
     outsusceptiblepath = pjoin(outdir, 'susceptible{:02d}.png'.format(ep))
     outinfectedpath = pjoin(outdir, 'infected{:02d}.png'.format(ep))
 
@@ -780,11 +728,13 @@ def plot_sir(s, i, fig, ax, sirpath):
     ax.legend()
     fig.savefig(sirpath)
 
+##########################################################
 def random_string(length=8):
     """Generate a random string of fixed length """
     letters = np.array(list(string.ascii_lowercase + string.digits))
     return ''.join(np.random.choice(letters, size=length))
 
+##########################################################
 def generate_params_combinations(origcfg):
     """Generate a random string of fixed length. It is dependent on the order of
     the columns in the dataframe"""
@@ -832,15 +782,9 @@ def generate_params_combinations(origcfg):
 
     return params
 
+##########################################################
 def convert_list_to_df(mylist):
-    """short-description
-
-    Args:
-    mylist(list): list of rows
-
-    Returns:
-    pd.Dataframe: resulting dataframe
-    """
+    """Convert list to pd.DataFrame and assign expidx if it does not exist"""
 
     hashsz = 8
     for i in range(len(mylist)):
@@ -858,15 +802,9 @@ def convert_list_to_df(mylist):
         # pstr = [str(x) for x in [hash] + list(mylist[i])]
         # fh.write(','.join(pstr) + '\n')
 
+##########################################################
 def load_df_from_json(myjson):
-    """Load a pandas dataframe from a cfg file
-
-    Args:
-    cfg
-
-    Returns:
-    ret
-    """
+    """Load a pandas dataframe from a cfg file"""
     aux = generate_params_combinations(myjson)
     nrows = len(aux)
     colnames = list(myjson.keys())
@@ -877,6 +815,7 @@ def load_df_from_json(myjson):
 
     return df
 
+##########################################################
 def prepend_random_ids_columns(df):
     n = df.shape[0]
     hashsz = 8
@@ -929,7 +868,6 @@ def get_experiments_table(configpath, expspath):
     if not os.path.exists(expspath) or len(loadeddf) != len(expsdf): rewriteexps = True
     else: rewriteexps = False
     return expsdf, rewriteexps
-
 
 ##########################################################
 def main():
