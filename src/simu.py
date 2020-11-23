@@ -535,7 +535,10 @@ def run_experiment(cfg):
         if mobilityratio == -1 or np.random.random() < mobilityratio:
             particles = step_mobility(g, particles, nagents)
             if mobilityratio != -1: # If interleaved steps
-                statuscountperepoch[ep, :] = statuscountperepoch[ep-1, :] # Keep the prev. ep value
+                # Keep the prev. ep value
+                statuscountperepoch[ep, :] = statuscountperepoch[ep-1, :]
+                statuscountpervertex = sum_status_per_vertex(status, particles,
+                                                             nvertices)
                 mobstep[ep] = 1
                 continue # Do NOT transmit in this step
 
