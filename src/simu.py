@@ -98,9 +98,6 @@ def generate_lattice(n, thoroidal=False, s=10):
                 adj[curidx, neigh] = 1
     return pos, adj
 
-#############################################################
-def run_one_experiment_given_list(l):
-    run_experiment(l)
 
 #############################################################
 def get_rgg_params(nvertices, avgdegree):
@@ -332,19 +329,10 @@ def plot_gradients(g, coords, gradiestsrasterpath, visualorig, plotalpha):
     gradientslabels = [ '{:2.3f}'.format(x/gradsum) for x in g.vs['gradient']]
     visual['edge_width'] = 0
 
-    if False:
-        from mpl_toolkits.mplot3d import Axes3D
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.plot_trisurf(coords[:, 0], coords[:, 1], g.vs['gradient'], cmap='viridis',
-                        vmin=0, vmax=7,
-                        linewidth=0.0, shade=True)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        plt.savefig(gradiestsrasterpath)
-    else:
-        igraph.plot(g, target=gradiestsrasterpath, layout=coords.tolist(),
-                    vertex_color=gradientscolors, **visual)
+    igraph.plot(g, target=gradiestsrasterpath, layout=coords.tolist(),
+                vertex_color=gradientscolors,
+                vertex_label=[str(x) for x in range(g.vcount())],
+                **visual)
 
 ##########################################################
 def plot_topology(g, coords, toprasterpath, visualorig, plotalpha):
@@ -411,11 +399,12 @@ def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep,
         fh.write(','.join(str(x) for x in summary.values()))
 
 ##########################################################
-def run_experiment(cfg):
+def run_experiment_given_list(cfg):
     """Execute an experiment given the parameters defined in the @cfg dict."""
 
     plotalpha = .9
     DELAYTIME = 3600
+    store_count_per_vertex = True
 
     t0 = time.time()
     cfgdf = pd.DataFrame.from_dict(cfg, 'index', columns=['data'])
@@ -472,7 +461,6 @@ def run_experiment(cfg):
     mapside = int(np.sqrt(nvertices))
     istoroid = latticethoroidal
 
-
     visual = define_plot_layout(mapside, plotzoom, expidx)
 
     if mobilityratio == -1: # Steps occur in parallel
@@ -510,14 +498,17 @@ def run_experiment(cfg):
 
     export_map(coords, g.vs['gradient'], mappath, expidx)
 
-    if plotrate > 0:
-        plot_gradients(g, coords, gradsrasterpath, visual, plotalpha)
-        plot_topology(g, coords, toporasterpath, visual, plotalpha)
-        statuscountpervertex  = sum_status_per_vertex(status, particles, nvertices, )
-        visual["edge_width"] = 0.0
+    plot_gradients(g, coords, gradsrasterpath, visual, plotalpha)
+    plot_topology(g, coords, toporasterpath, visual, plotalpha)
+    statuscountpervertex  = sum_status_per_vertex(status, particles, nvertices, )
+    visual["edge_width"] = 0.0
 
     maxepoch = nepochs if nepochs > 0 else MAX
     transmstep[0] = 0; mobstep[0] = 0 # Nobody either move or transmit in epoch 0
+
+    if store_count_per_vertex:
+        particlpervertex = - np.ones((maxepoch, nvertices), dtype=int)
+        particlpervertex[0, :] = [len(x) for x in particles]
 
     for ep in range(1, maxepoch):
         lastepoch = ep
@@ -534,6 +525,9 @@ def run_experiment(cfg):
 
         if mobilityratio == -1 or np.random.random() < mobilityratio:
             particles = step_mobility(g, particles, nagents)
+            if store_count_per_vertex:
+                particlpervertex[ep, :] = [len(x) for x in particles]
+
             if mobilityratio != -1: # If interleaved steps
                 # Keep the prev. ep value
                 statuscountperepoch[ep, :] = statuscountperepoch[ep-1, :]
@@ -562,6 +556,12 @@ def run_experiment(cfg):
     nparticlesstds = nparticlesstds[:lastepoch+1]
 
     elapsed = time.time() - t0
+
+    if store_count_per_vertex:
+        cols = ['v{:03d}'.format(x) for x in range(nvertices)]
+        myidx = ['ep{:03d}'.format(x) for x in range(maxepoch)]
+        countsdf = pd.DataFrame(particlpervertex, columns=cols, index=myidx)
+        countsdf.to_csv(pjoin(outdir, 'countpervertex.csv'))
 
     export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountperepoch, nparticlesstds, lastepoch, mobstep,
@@ -867,8 +867,10 @@ def get_experiments_table(configpath, expspath):
             info('Error occurred when merging exps')
             info(e)
             expsdf = configdf
+
     expsdf.set_index('expidx')
-    if not os.path.exists(expspath) or len(loadeddf) != len(expsdf): rewriteexps = True
+    if not os.path.exists(expspath) or len(loadeddf) != len(expsdf):
+        rewriteexps = True
     else: rewriteexps = False
     return expsdf, rewriteexps
 
@@ -911,11 +913,11 @@ def main():
     if args.shuffle: np.random.shuffle(params)
 
     if cfg.nprocs[0] == 1:
-        [ run_one_experiment_given_list(p) for p in params ]
+        [ run_experiment_given_list(p) for p in params ]
     else:
         info('Running in parallel ({})'.format(cfg.nprocs[0]))
         pool = Pool(cfg.nprocs[0])
-        pool.map(run_one_experiment_given_list, params)
+        pool.map(run_experiment_given_list, params)
 
 
 ##########################################################
