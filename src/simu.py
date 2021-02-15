@@ -475,7 +475,7 @@ def run_experiment_given_list(cfg):
     avgpathlen = g.average_path_length(directed=False, unconn=True)
     coordsrms = np.sqrt(np.mean(np.square(coords)))
 
-    nagents   = cfg['nagentspervertex'] * nvertices
+    nagents   = int(cfg['nagentspervertex'] * nvertices)
     s0        = int(nagents*cfg['s0'])
     i0        = int(nagents*cfg['i0'])
 
