@@ -4,30 +4,22 @@
 
 import argparse
 import logging
-import os, sys
+import os, sys, string, random, math, time, socket
 from os.path import join as pjoin
 from logging import debug, info
 from itertools import product
 from pathlib import Path
-import socket
-import time
 
-import string
 import igraph
-# import networkx as nx
 import numpy as np
 import pandas as pd
-import copy
-# from matplotlib import cm
 from matplotlib import pyplot as plt
-import math
 from subprocess import Popen, PIPE
 from datetime import datetime
 from multiprocessing import Pool
 import pickle as pkl
 import scipy
 import scipy.optimize
-# import torch
 from optimized import step_mobility, step_transmission, generate_waxman_adj
 from optimized import get_matrix_index_from_triu, get_linear_index_from_triu
 from optimized import update_contacts_list
@@ -147,8 +139,8 @@ def get_waxman_params(nvertices, avgdegree, alpha, wxparamspath):
 
 #############################################################
 def generate_graph(topologymodel, nvertices, avgdegree, latticethoroidal,
-                   baoutpref, wsrewiring, wxalpha, expidx, randomseed,
-                   wxparamspath, tmpdir):
+                   baoutpref, wsrewiring, wxalpha, expidx,
+                   graphseed, wxparamspath, tmpdir):
     """Generate graph with given topology
 
     Args:
@@ -183,7 +175,7 @@ def generate_graph(topologymodel, nvertices, avgdegree, latticethoroidal,
         g = igraph.Graph.GRG(nvertices, radius)
     elif topologymodel == 'wx':
         bufwaxmanpath = pjoin(tmpdir, 'waxman_{:02d}_{:01.4f}_{:02d}.pkl'.\
-                              format(avgdegree, wxalpha,randomseed))
+                              format(avgdegree, wxalpha, graphseed))
         try:
             with open(bufwaxmanpath, 'rb') as fh:
                 g = pkl.load(fh)
@@ -470,9 +462,14 @@ def run_experiment_given_list(cfg):
         transmstep = np.zeros(MAXITERS, dtype=bool)
         mobstep = np.zeros(MAXITERS, dtype=bool)
 
+    graphseed = 0 # Force graphs to always be the same
+    np.random.seed(graphseed); random.seed(graphseed)
     g, coords = generate_graph(topologymodel, nvertices, avgdegree,
                                latticethoroidal, baoutpref, wsrewiring, wxalpha,
-                               expidx, randomseed, cfg['wxparamspath'], cfg['outdir'])
+                               expidx, graphseed,
+                               cfg['wxparamspath'], cfg['outdir'])
+    np.random.seed(randomseed); random.seed(randomseed)
+
     nvertices = g.vcount()
     nedges = g.ecount()
     avgpathlen = g.average_path_length(directed=False, unconn=True)
