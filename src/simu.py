@@ -497,6 +497,7 @@ def run_experiment_given_list(cfg):
     g = initialize_gradients(g, coords, ngaussians, gaussianstd, expidx)
 
     export_map(coords, g.vs['gradient'], mappath, expidx)
+    g.write_adjacency(pjoin(outdir, 'graph.csv'), sep=',')
 
     plot_gradients(g, coords, gradsrasterpath, visual, plotalpha)
     plot_topology(g, coords, toporasterpath, visual, plotalpha)
