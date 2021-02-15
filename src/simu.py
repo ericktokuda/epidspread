@@ -524,7 +524,8 @@ def run_experiment_given_list(cfg):
 
         nparticlesstds[ep] = np.std([len(x) for x in particles])
 
-        if mobilityratio == -1 or np.random.random() < mobilityratio:
+        # if mobilityratio == -1 or np.random.random() < mobilityratio:
+        if mobilityratio == -1 or ep % mobilityratio == 0:
             particles = step_mobility(g, particles, nagents)
             if store_count_per_vertex:
                 particlpervertex[ep, :] = [len(x) for x in particles]
