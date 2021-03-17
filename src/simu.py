@@ -513,8 +513,8 @@ def run_experiment_given_list(cfg):
     transmstep[0] = 0; mobstep[0] = 0 # Nobody either move or transmit in epoch 0
 
     if store_count_per_vertex:
-        particlpervertex = - np.ones((maxepoch, nvertices), dtype=int)
-        particlpervertex[0, :] = [len(x) for x in particles]
+        statuscountpervertexall = - np.ones((maxepoch, nvertices, 2), dtype=int)
+        # particlpervertex[0, :] = [len(x) for x in particles]
 
     for ep in range(1, maxepoch):
         lastepoch = ep
@@ -529,11 +529,12 @@ def run_experiment_given_list(cfg):
 
         nparticlesstds[ep] = np.std([len(x) for x in particles])
 
+        if store_count_per_vertex:
+            statuscountpervertexall[ep - 1, :, :] = statuscountpervertex
+
         # if mobilityratio == -1 or np.random.random() < mobilityratio:
         if mobilityratio == -1 or ep % mobilityratio == 0:
             particles = step_mobility(g, particles, nagents)
-            if store_count_per_vertex:
-                particlpervertex[ep, :] = [len(x) for x in particles]
 
             if mobilityratio != -1: # If interleaved steps
                 # Keep the prev. ep value
@@ -565,10 +566,15 @@ def run_experiment_given_list(cfg):
     elapsed = time.time() - t0
 
     if store_count_per_vertex:
+        statuscountpervertexall[-1, :, :] = statuscountpervertex
+
         cols = ['v{:03d}'.format(x) for x in range(nvertices)]
         myidx = ['ep{:03d}'.format(x) for x in range(maxepoch)]
-        countsdf = pd.DataFrame(particlpervertex, columns=cols, index=myidx)
-        countsdf.to_csv(pjoin(outdir, 'countpervertex.csv'))
+
+        for j, stat in enumerate(['S', 'I']):
+            countsdf = pd.DataFrame(statuscountpervertexall[:, :, j], columns=cols,
+                                    index=myidx)
+            countsdf.to_csv(pjoin(outdir, 'count{}pervertex.csv'.format(stat)))
 
     export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountperepoch, nparticlesstds, lastepoch, mobstep,
