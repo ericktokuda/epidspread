@@ -24,6 +24,10 @@ from optimized import step_mobility, step_transmission, generate_waxman_adj
 from optimized import get_matrix_index_from_triu, get_linear_index_from_triu
 from optimized import update_contacts_list
 
+from make_rw_matrix import calc_rw_transition_matrix # PauloCVS
+from make_rw_matrix import calc_matrix_leading_eigenvector
+from make_rw_matrix import distribute_agents_by_weights
+
 ########################################################## Defines
 SUSCEPTIBLE = 0
 INFECTED = 1
@@ -470,6 +474,8 @@ def run_experiment_given_list(cfg):
                                cfg['wxparamspath'], cfg['outdir'])
     np.random.seed(randomseed); random.seed(randomseed)
 
+    g = initialize_gradients(g, coords, ngaussians, gaussianstd, expidx)
+
     nvertices = g.vcount()
     nedges = g.ecount()
     avgpathlen = g.average_path_length(directed=False, unconn=True)
@@ -488,10 +494,12 @@ def run_experiment_given_list(cfg):
 
     ntransmpervertex = np.zeros(nvertices, dtype=int)
 
-    particles = distribute_agents(nvertices, nagents, expidx)
+    rw_transmat = calc_rw_transition_matrix(g)
+    node_probabs = calc_matrix_leading_eigenvector(rw_transmat, sparse=True)
+    particles = distribute_agents_by_weights(nvertices, nagents, expidx,
+                                             weights=node_probabs)
     nparticlesstds = np.zeros((MAXITERS,), dtype=float)
 
-    g = initialize_gradients(g, coords, ngaussians, gaussianstd, expidx)
 
     export_map(coords, g.vs['gradient'], mappath, expidx)
     g.write_adjacency(pjoin(outdir, 'graph.csv'), sep=',')
