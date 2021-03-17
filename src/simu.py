@@ -452,7 +452,6 @@ def run_experiment_given_list(cfg):
     open(runningpath, 'w').write(str(time.time()))
 
     copy_experiment_config(cfgdf, outjsonpath, expidx)
-    np.random.seed(randomseed)
 
     mapside = int(np.sqrt(nvertices))
     istoroid = latticethoroidal
@@ -466,15 +465,16 @@ def run_experiment_given_list(cfg):
         transmstep = np.zeros(MAXITERS, dtype=bool)
         mobstep = np.zeros(MAXITERS, dtype=bool)
 
-    graphseed = 0 # Force graphs to always be the same
+    graphseed = 0 # Force graphs and gradients to always be the same
     np.random.seed(graphseed); random.seed(graphseed)
     g, coords = generate_graph(topologymodel, nvertices, avgdegree,
                                latticethoroidal, baoutpref, wsrewiring, wxalpha,
                                expidx, graphseed,
                                cfg['wxparamspath'], cfg['outdir'])
-    np.random.seed(randomseed); random.seed(randomseed)
 
     g = initialize_gradients(g, coords, ngaussians, gaussianstd, expidx)
+
+    np.random.seed(randomseed); random.seed(randomseed)
 
     nvertices = g.vcount()
     nedges = g.ecount()
@@ -931,7 +931,6 @@ def main():
         info('Running in parallel ({})'.format(cfg.nprocs[0]))
         pool = Pool(cfg.nprocs[0])
         pool.map(run_experiment_given_list, params)
-
 
 ##########################################################
 if __name__ == "__main__":
