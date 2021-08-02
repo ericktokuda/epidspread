@@ -422,11 +422,12 @@ def run_experiment_given_list(cfg):
     gamma     = cfg['gamma']
     ngaussians = cfg['ngaussians']
     gaussianstd = cfg['gaussianstd']
+    gaussianpower= cfg['gaussianpower']
     plotzoom  = cfg['plotzoom']
     plotrate  = cfg['plotrate']
     nprocs    = cfg['nprocs']
     randomseed= cfg['randomseed']
-    expidx= cfg['expidx']
+    expidx = cfg['expidx']
 
     outdir = pjoin(outdir, expidx)
     ntransmpath = pjoin(outdir, 'ntransmperepoch.csv') # Stats per epoch
@@ -472,7 +473,7 @@ def run_experiment_given_list(cfg):
                                expidx, graphseed,
                                cfg['wxparamspath'], cfg['outdir'])
 
-    g = initialize_gradients(g, coords, ngaussians, gaussianstd, expidx)
+    g = initialize_gradients(g, coords, ngaussians, gaussianstd, gaussianpower)
 
     np.random.seed(randomseed); random.seed(randomseed)
 
@@ -651,7 +652,8 @@ def initialize_gradients_gaussian_on_graph(g, mu=0, sigma=1):
 
 ##########################################################
 def initialize_gradients_gaussian(g, coords, mu, cov):
-    """Initizalition of gradients with a gaussian considering the location. Returns the an igraph instance with updated gradients """
+    """Initizalition of gradients with a gaussian considering the location.
+    Returns the an igraph instance with updated gradients """
 
     for i, v in enumerate(g.vs):
         g.vs[i]['gradient'] = multivariate_normal(coords[i, :], mu, cov)
@@ -659,18 +661,16 @@ def initialize_gradients_gaussian(g, coords, mu, cov):
     return g
 
 ##########################################################
-def initialize_gradients(g, coords, ngaussians, sigma, expidx):
-    """Initialize gradients with some distribution
+def gradient_to_the_power(g, power):
+    """ Returns the an igraph instance with updated gradients """
+    grads = np.array(g.vs['gradient']) ** power
+    g.vs['gradient'] = grads.tolist()
+    return g
 
-    Args:
-    g(igraph.Graph): graph instance
+##########################################################
+def initialize_gradients(g, coords, ngaussians, sigma, gradpower):
+    """Initialize gradients with some distribution """
 
-    Returns:
-    igraph.Graph: graph instance with attribute 'gradient' updated
-    """
-
-
-    info('exp:{} Initializing gradients distribution ...'.format(expidx))
     if ngaussians == 0 or sigma > 998:
         g.vs['gradient'] = 0.1
         return g
@@ -679,7 +679,9 @@ def initialize_gradients(g, coords, ngaussians, sigma, expidx):
     mu = np.random.rand(2) * 2 - 0.9999 # Not 1 because rand includes 0
 
     cov = np.eye(2) * sigma
-    return initialize_gradients_gaussian(g, coords, mu, cov)
+    g = initialize_gradients_gaussian(g, coords, mu, cov)
+    g = gradient_to_the_power(g, gradpower)
+    return g
 
 ##########################################################
 def sum_status_per_vertex(status, particles, nvertices, nclasses=2):
