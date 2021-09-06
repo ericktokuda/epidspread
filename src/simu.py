@@ -374,9 +374,9 @@ def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep,
     outdf.to_csv(ntransmpath, index=True, index_label='t')
 
     # Plot SIR over time
-    info('exp:{} Generating plots for counts of S, I, R'.format(expidx))
+    info('exp:{} Generating plots for counts of S, I'.format(expidx))
     fig, ax = plt.subplots(1, 1)
-    plot_sir(statuscountsum[:, 0], statuscountsum[:, 1], fig, ax, sirplotpath)
+    plot_sis(statuscountsum[:, 0], statuscountsum[:, 1], fig, ax, sirplotpath)
 
     info('exp:{} Elapsed time: {:.2f}min'.format(expidx, elapsed/60))
     summary = dict(
@@ -510,7 +510,7 @@ def run_experiment_given_list(cfg):
     statuscountpervertex  = sum_status_per_vertex(status, particles, nvertices, )
     visual["edge_width"] = 0.0
 
-    maxepoch = nepochs if nepochs > 0 else MAX
+    maxepoch = nepochs if nepochs > 0 else MAXITERS
     transmstep[0] = 0; mobstep[0] = 0 # Nobody either move or transmit in epoch 0
 
     if store_count_per_vertex:
@@ -740,7 +740,7 @@ def plot_epoch_graphs(ep, g, coords, visual, status, nvertices, particles,
     stdout, stderr = proc.communicate()
 
 ##########################################################
-def plot_sir(s, i, fig, ax, sirpath):
+def plot_sis(s, i, fig, ax, sirpath):
     ax.plot(s, 'g', label='Susceptibles')
     ax.plot(i, 'r', label='Infected')
     ax.legend()
@@ -865,7 +865,6 @@ def get_experiments_table(configpath, expspath):
 
     # if not 'expidx' in configdf.columns:
     configdf = prepend_random_ids_columns(configdf)
-
     expsdf = configdf
     if os.path.exists(expspath):
         try:
