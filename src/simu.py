@@ -395,6 +395,21 @@ def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep,
         fh.write(','.join(str(x) for x in summary.values()))
 
 ##########################################################
+def write_adjacency_list(g, outpath, sep):
+    """Write adjacency list"""
+    neighs = ''
+    for i in range(g.vcount()):
+        k = sep.join([str(v) for v in g.neighbors(i)])
+        neighs += k + '\n'
+    fh = open(outpath, 'w')
+    fh.write(neighs)
+    fh.close()
+
+##########################################################
+def write_graph(g, outpath, matrix=False, sep=','):
+    if matrix: g.write_adjacency(outpath, sep=sep)
+    else: write_adjacency_list(g, outpath, sep)
+##########################################################
 def run_experiment_given_list(cfg):
     """Execute an experiment given the parameters defined in the @cfg dict."""
 
@@ -503,7 +518,7 @@ def run_experiment_given_list(cfg):
 
 
     export_map(coords, g.vs['gradient'], mappath, expidx)
-    g.write_adjacency(pjoin(outdir, 'graph.csv'), sep=',')
+    write_graph(g, pjoin(outdir, 'graph.csv'), matrix=False)
 
     plot_gradients(g, coords, gradsrasterpath, visual, plotalpha)
     plot_topology(g, coords, toporasterpath, visual, plotalpha)
