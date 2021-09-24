@@ -20,6 +20,8 @@ from multiprocessing import Pool
 import pickle as pkl
 import scipy
 import scipy.optimize
+import json, copy
+from types import SimpleNamespace
 from optimized import step_mobility, step_transmission, generate_waxman_adj
 from optimized import get_matrix_index_from_triu, get_linear_index_from_triu
 from optimized import update_contacts_list
@@ -768,52 +770,31 @@ def random_string(length=8):
     return ''.join(np.random.choice(letters, size=length))
 
 ##########################################################
-def generate_params_combinations(origcfg):
+def add_to_params(top, origcfg):
+    """"""
+    cfg = copy.deepcopy(origcfg)
+    cfg.topologymodel = [top]
+    if top != 'la': cfg.lathoroidal = [-1]
+    if top != 'ba': cfg.baoutpref = [-1]
+    if top != 'ws': cfg.wsrewiring = [-1]
+    if top != 'wx': cfg.wxalpha = [-1]
+    if top != 'wx': cfg.wxparamspath = ['x']
+    if top == 'la': cfg.avgdegree = [4]
+
+    aux = (list(cfg.__dict__.values()))
+    return list(product(*aux))
+
+##########################################################
+def generate_param_combinations(origcfg):
     """Generate a random string of fixed length. It is dependent on the order of
     the columns in the dataframe"""
-    cfg = origcfg.copy()
-    cfg.lathoroidal = [-1]
-    cfg.baoutpref = [-1]
-    cfg.wsrewiring = [-1]
-    cfg.wxalpha = [-1]
-
     params = []
-    if 'la' in cfg.topologymodel:
-        aux = cfg.copy()
-        aux.topologymodel = ['la']
-        aux.lathoroidal = origcfg.lathoroidal
-        aux.avgdegree = [4]
-        params += list(product(*aux))
+    for top in origcfg.topologymodel:
+        params.extend(add_to_params(top, origcfg))
 
-    if 'er' in cfg.topologymodel:
-        aux = cfg.copy()
-        aux.topologymodel = ['er']
-        params += list(product(*aux))
-
-    if 'ba' in cfg.topologymodel:
-        aux = cfg.copy()
-        aux.topologymodel = ['ba']
-        aux['baoutpref'] = origcfg.baoutpref
-        params += list(product(*aux))
-
-    if 'ws' in cfg.topologymodel:
-        aux = cfg.copy()
-        aux.topologymodel = ['ws']
-        aux['wsrewiring'] = origcfg.wsrewiring
-        params += list(product(*aux))
-
-    if 'gr' in cfg.topologymodel:
-        aux = cfg.copy()
-        aux.topologymodel = ['gr']
-        params += list(product(*aux))
-
-    if 'wx' in cfg.topologymodel:
-        aux = cfg.copy()
-        aux.topologymodel = ['wx']
-        aux['wxalpha'] = origcfg.wxalpha
-        params += list(product(*aux))
-
-    return params
+    nrows = len(params)
+    colnames = list(origcfg.__dict__.keys())
+    return pd.DataFrame(params, columns=colnames)
 
 ##########################################################
 def convert_list_to_df(mylist):
@@ -836,19 +817,6 @@ def convert_list_to_df(mylist):
         # fh.write(','.join(pstr) + '\n')
 
 ##########################################################
-def load_df_from_json(myjson):
-    """Load a pandas dataframe from a cfg file"""
-    aux = generate_params_combinations(myjson)
-    nrows = len(aux)
-    colnames = list(myjson.keys())
-    df = pd.DataFrame(index=np.arange(0, nrows), columns=colnames)
-
-    for i in np.arange(0, nrows):
-        df.loc[i] = aux[i]
-
-    return df
-
-##########################################################
 def prepend_random_ids_columns(df):
     n = df.shape[0]
     hashsz = 8
@@ -864,82 +832,41 @@ def prepend_random_ids_columns(df):
     return df
 
 ##########################################################
-def get_experiments_table(configpath, expspath):
-    """Merge requested experiments from @configpath and already executed ones
-    (@expspath)
-
-    Args:
-    configpath(str): path to the config file in json format
-    expspath(str): path to the exps file in csv format
-
-    Returns:
-    pd.DataFrame: merged experiments directives
+def get_experiments_table(configpath, expspath, seed=0):
+    """Generate combinations of parameters in @configpath,
+    assign random ids based on @seed
     """
-    configdf = load_df_from_json(configpath)
-    cols = configdf.columns.tolist()
-
-    # if not 'expidx' in configdf.columns:
-    configdf = prepend_random_ids_columns(configdf)
-    expsdf = configdf
     if os.path.exists(expspath):
-        try:
-            loadeddf = pd.read_csv(expspath)
-            aux = pd.concat([loadeddf, configdf], sort=False, ignore_index=True)
-            cols.remove('outdir')
-            cols.remove('wxparamspath')
-            cols.remove('nprocs')
-            expsdf = aux.drop_duplicates(cols, keep='first')
-            expsdf = expsdf.assign(outdir = configdf.outdir[0])
-            expsdf = expsdf.assign(wxparamspath = configdf.wxparamspath[0])
-            expsdf = expsdf.assign(nprocs = configdf.nprocs[0])
-        except Exception as e:
-            info('Error occurred when merging exps')
-            info(e)
-            expsdf = configdf
-
-    expsdf.set_index('expidx')
-    if not os.path.exists(expspath) or len(loadeddf) != len(expsdf):
-        rewriteexps = True
-    else: rewriteexps = False
-    return expsdf, rewriteexps
+        expsdf = pd.read_csv(expspath)
+    else:
+        expsdf = generate_param_combinations(configpath)
+        expsdf = prepend_random_ids_columns(expsdf)
+        cols = expsdf.columns.tolist()
+        expsdf.set_index('expidx')
+        expsdf.to_csv(expspath, index=False)
+    return expsdf
 
 ##########################################################
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('config', help='Config file')
-    parser.add_argument('--continue_', action='store_true', help='Continue execution')
-    parser.add_argument('--shuffle', action='store_true',
-                        help='Shuffled traversing of config parameters')
+    parser.add_argument('--continue_', action='store_true', help='Continue run')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s] %(message)s',
-    datefmt='%Y%m%d %H:%M', level=logging.INFO)
+            datefmt='%Y%m%d %H:%M', level=logging.INFO)
 
-    cfg = pd.read_json(args.config, typ='series', precise_float=True) # Load config
-
+    np.random.seed(0); random.seed(0)
+    cfg = json.load(open(args.config), object_hook=lambda d: SimpleNamespace(**d))
     outdir = cfg.outdir[0]
 
-    existing = os.path.exists(outdir)
-
-    if existing and not args.continue_:
-        print('Folder {} exists. Change the outdir parameter or use --continue_'. \
-              format(outdir))
+    if os.path.exists(outdir) and (not args.continue_):
+        print('Dir exists. Change the outdir parameter or use --continue_')
         return
 
     os.makedirs(outdir, exist_ok=True)
-    cfg.outdir = [outdir]
-
-    expspath = pjoin(outdir, 'exps.csv')
-    expsdf, rewriteexps = get_experiments_table(cfg, expspath)
-
-    if os.path.exists(expspath) and rewriteexps:
-        os.rename(expspath, expspath.replace('exps.csv', 'exps_orig.csv'))
-
-    if not os.path.exists(expspath) or rewriteexps:
-        expsdf.drop(columns=['outdir', 'nprocs']).to_csv(expspath, index=False)
-
+    expsdf = get_experiments_table(cfg, pjoin(outdir, 'exps.csv'))
     params = expsdf.to_dict(orient='records')
-    if args.shuffle: np.random.shuffle(params)
 
     if cfg.nprocs[0] == 1:
         [ run_experiment_given_list(p) for p in params ]
