@@ -2,9 +2,14 @@
 """ Simulation of two dynamics: mobility and infection over a lattice
 """
 
+import os
+os.environ["MKL_NUM_THREADS"] = "6"
+os.environ["NUMEXPR_NUM_THREADS"] = "6"
+os.environ["OMP_NUM_THREADS"] = "6"
+
 import argparse
 import logging
-import os, sys, string, random, math, time, socket
+import sys, string, random, math, time, socket
 from os.path import join as pjoin
 from logging import debug, info
 from itertools import product
@@ -376,9 +381,9 @@ def export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep,
     outdf.to_csv(ntransmpath, index=True, index_label='t')
 
     # Plot SIR over time
-    info('exp:{} Generating plots for counts of S, I'.format(expidx))
-    fig, ax = plt.subplots(1, 1)
-    plot_sis(statuscountsum[:, 0], statuscountsum[:, 1], fig, ax, sirplotpath)
+    # info('exp:{} Generating plots for counts of S, I'.format(expidx))
+    # fig, ax = plt.subplots(1, 1)
+    # plot_sis(statuscountsum[:, 0], statuscountsum[:, 1], fig, ax, sirplotpath)
 
     info('exp:{} Elapsed time: {:.2f}min'.format(expidx, elapsed/60))
     summary = dict(
@@ -483,7 +488,8 @@ def run_experiment_given_list(cfg):
         transmstep = np.zeros(MAXITERS, dtype=bool)
         mobstep = np.zeros(MAXITERS, dtype=bool)
 
-    graphseed = 0 # Force graphs and gradients to always be the same
+    # graphseed = 0 # Force graphs and gradients to always be the same
+    graphseed = randomseed # Force graphs and gradients to always be the same
     np.random.seed(graphseed); random.seed(graphseed)
     g, coords = generate_graph(topologymodel, nvertices, avgdegree,
                                latticethoroidal, baoutpref, wsrewiring, wxalpha,
@@ -508,9 +514,10 @@ def run_experiment_given_list(cfg):
     statuscountperepoch = np.zeros((MAXITERS, 2), dtype=int)
     statuscountperepoch[0, :] = np.array([s0, i0])
 
-    # visualize_static_graph_layouts(g, 'config/layouts_lattice.txt', outdir);
-
     ntransmpervertex = np.zeros(nvertices, dtype=int)
+
+    export_map(coords, g.vs['gradient'], mappath, expidx)
+    write_graph(g, pjoin(outdir, 'graph.csv'), matrix=False)
 
     rw_transmat = calc_rw_transition_matrix(g)
     node_probabs = calc_matrix_leading_eigenvector(rw_transmat, sparse=True)
@@ -518,12 +525,8 @@ def run_experiment_given_list(cfg):
                                              weights=node_probabs)
     nparticlesstds = np.zeros((MAXITERS,), dtype=float)
 
-
-    export_map(coords, g.vs['gradient'], mappath, expidx)
-    write_graph(g, pjoin(outdir, 'graph.csv'), matrix=False)
-
-    plot_gradients(g, coords, gradsrasterpath, visual, plotalpha)
-    plot_topology(g, coords, toporasterpath, visual, plotalpha)
+    # plot_gradients(g, coords, gradsrasterpath, visual, plotalpha)
+    # plot_topology(g, coords, toporasterpath, visual, plotalpha)
     statuscountpervertex  = sum_status_per_vertex(status, particles, nvertices, )
     visual["edge_width"] = 0.0
 
@@ -589,10 +592,10 @@ def run_experiment_given_list(cfg):
         cols = ['v{:03d}'.format(x) for x in range(nvertices)]
         myidx = ['ep{:03d}'.format(x) for x in range(maxepoch)]
 
-        for j, stat in enumerate(['S', 'I']):
-            countsdf = pd.DataFrame(statuscountpervertexall[:, :, j], columns=cols,
-                                    index=myidx)
-            countsdf.to_csv(pjoin(outdir, 'count{}pervertex.csv'.format(stat)))
+        # for j, stat in enumerate(['S', 'I']):
+            # countsdf = pd.DataFrame(statuscountpervertexall[:, :, j], columns=cols,
+                                    # index=myidx)
+            # countsdf.to_csv(pjoin(outdir, 'count{}pervertex.csv'.format(stat)))
 
     export_summaries(ntransmpervertex, ntransmpervertexpath, transmstep, ntransmpath,
                      elapsed, statuscountperepoch, nparticlesstds, lastepoch, mobstep,
@@ -851,6 +854,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('config', help='Config file')
     parser.add_argument('--continue_', action='store_true', help='Continue run')
+    parser.add_argument('--flow', default='forward', help='Order of execution')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s] %(message)s',
@@ -866,7 +870,13 @@ def main():
 
     os.makedirs(outdir, exist_ok=True)
     expsdf = get_experiments_table(cfg, pjoin(outdir, 'exps.csv'))
+
+    expsdf = expsdf.loc[expsdf.gaussianpower.isin([3.0])] #TODO: remove this
     params = expsdf.to_dict(orient='records')
+
+    assert args.flow in ['forward', 'backward', 'random']
+    if args.flow == 'backward': params = list(reversed(params))
+    elif args.flow == 'random': random.seed(time.time()); random.shuffle(params)
 
     if cfg.nprocs[0] == 1:
         [ run_experiment_given_list(p) for p in params ]

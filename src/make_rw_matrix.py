@@ -1,4 +1,3 @@
-""" by Paulo CVS"""
 
 import igraph
 import numpy as np
@@ -6,11 +5,6 @@ import numpy as np
 import scipy.linalg
 import scipy.sparse.linalg
 from logging import info
-
-# from epidspread.src.simu import generate_graph, initialize_gradients  # Now imported from aux
-# from aux import generate_graph, initialize_gradients
-
-
 
 def calc_rw_transition_matrix(g, out=None):
     """
@@ -56,7 +50,7 @@ def calc_rw_transition_matrix(g, out=None):
     return out
 
 
-def calc_matrix_leading_eigenvector(mat, sparse=True):
+def calc_matrix_leading_eigenvector(mat, sparse=True, round_decimals=14):
     """
     Returns (and possibly constructs) a 1D numpy array with the principal eigenvector of a matrix, that is, the one
     with greatest (real part of the) eigenvalue.
@@ -79,12 +73,18 @@ def calc_matrix_leading_eigenvector(mat, sparse=True):
     """
 
     if sparse:
-        eigval, eigvec = scipy.sparse.linalg.eigs(mat.transpose(), k=1)
+        eigval, eigvec = scipy.sparse.linalg.eigs(mat.transpose(), k=1,
+                                                  tol=1e-10, maxiter=10000)
     else:
         eigval, eigvec = scipy.linalg.eig(mat.transpose())
+        eigvec = eigvec[:, 0]
 
-    # Reshapes and rearranges the array, then normalizes by its sum (pre-assuming it is not zero, shouldn't be!).
+    # Reshapes and rearranges the array. Also truncates very small values to prevent negatives (numerical error)
     eigvec = eigvec.real.flatten().ravel()
+    if round_decimals is not None:
+        eigvec = np.around(eigvec, round_decimals)
+
+    # Normalizes by its sum (pre-assuming it is not zero, shouldn't be!).
     eigvec /= np.sum(eigvec)
 
     return eigvec
@@ -142,7 +142,7 @@ def main():
     particles = distribute_agents_by_weights(nvertices, nagents, expidx, weights=node_probabs)
 
     # ------------------
-    # Optional - visiualization of the results as plots
+    # Optional - visualization of the results as plots
     if view_results:
         info("Importing pyplot and plotting...")
         import matplotlib.pyplot as plt
