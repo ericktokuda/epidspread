@@ -465,11 +465,11 @@ def run_experiment_given_list(cfg):
 
     if os.path.exists(summarypath):
         return
-    elif os.path.exists(runningpath):
-        startedtime = float(open(runningpath).read().strip())
-        if (time.time() - startedtime) < DELAYTIME:
-            info('Skipping {} (recently started)'.format(expidx))
-            return
+    # elif os.path.exists(runningpath):
+        # startedtime = float(open(runningpath).read().strip())
+        # if (time.time() - startedtime) < DELAYTIME:
+            # info('Skipping {} (recently started)'.format(expidx))
+            # return
 
     os.makedirs(outdir, exist_ok=True) # Create outdir
     open(runningpath, 'w').write(str(time.time()))
@@ -871,7 +871,6 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     expsdf = get_experiments_table(cfg, pjoin(outdir, 'exps.csv'))
 
-    expsdf = expsdf.loc[expsdf.gaussianpower.isin([3.0])] #TODO: remove this
     params = expsdf.to_dict(orient='records')
 
     assert args.flow in ['forward', 'backward', 'random']
